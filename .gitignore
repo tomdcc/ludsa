@@ -1,0 +1,20 @@
+# C build output
+*.o
+*.a
+*.so
+*.lo
+*.d
+
+# Go build output
+/bin/
+*.test
+*.out
+
+# Fuzzing corpora grown locally; seeds live in testdata/ and are committed
+/**/testdata/fuzz/
+
+# Editors and OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
