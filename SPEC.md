@@ -71,7 +71,7 @@ holds it there is no version the client chose to answer in. Before that point
 the server closes without replying, whether it received no octets at all or
 fewer than that value needs.
 
-**Answering without one.** A server that owes a response but has not read
+**Answering without one.** A server that has decided to answer but has not read
 `ludsa_version_major` MAY answer in its own major version instead of closing.
 Before it does, it SHOULD allow the client a bounded interval to supply one,
 because a client that is about to send is better answered in its own version.
@@ -139,16 +139,18 @@ subject to:
   covered by this rule.
 - Every retry happens within the client's overall deadline.
 
-A client that never establishes a connection reports `CONNECTION_FAILED` (§7).
-That covers a permission failure, a path that is not there, and a retryable
-reason that had not resolved by the client's deadline. It is the one outcome a
-client reports without an exchange to report on, so no `RESPONSE_` name fits: a
-response cannot be absent from a connection that was never made.
+A client that never establishes a connection it is willing to use reports
+`CONNECTION_FAILED` (§7). That covers a permission failure, a path that is not
+there, a retryable reason that had not resolved by the client's deadline, and a
+peer whose identity is not the one the client was configured to expect. It is
+the one outcome a client reports without an exchange to report on, so no
+`RESPONSE_` name fits: a response cannot be absent from a request that was never
+sent.
 
 **A client may be configured with the server identity it expects**, as a user
 name or a uid. Where it is, the client MUST confirm the peer's identity before
-it writes. It MUST close the connection and fail where it cannot, without
-issuing a request.
+it writes. It MUST close the connection and report `CONNECTION_FAILED` (§7)
+where it cannot, without issuing a request.
 
 Not confirming covers two cases: a peer that is someone else, and a peer the
 client could not identify. A deployment that asks for a check its platform
@@ -170,9 +172,10 @@ correct.
 none configured MUST fail to start, and MUST NOT fall back to its own primary
 group.
 
-**The socket path.** A server MUST unlink a stale socket before it binds. It
-MUST NOT unlink a path that is not a socket, and MUST refuse to start if the
-configured path exists and is not a socket.
+**The socket path.** A server MUST refuse to start if the configured path exists
+and is not a socket, and MUST apply that test before it removes or replaces
+whatever is there. A stale socket MUST be gone from that path before the server
+publishes its own, whether the server unlinks it or replaces it atomically.
 
 ### 2.1 Independence of the two sides
 
@@ -278,8 +281,14 @@ contains it.** That covers `length` against `MAX_LENGTH`, a field's `len`
 against the remaining message.
 
 A response MUST carry the same `ludsa_version_major` as the request it answers,
-whenever the server implements that major version. Its `ludsa_version_minor` is
-the server's own for that major version, never an echo of the request's.
+whenever the server implements that major version and has read it from the
+request. Its `ludsa_version_minor` is the server's own for that major version,
+never an echo of the request's, so a server reports what it speaks rather than
+what it was addressed in.
+
+Where a server cannot match the client's major version, because it does not
+implement the one it was sent or because it read none, it answers in any major
+version it implements.
 
 The content of a response MUST NOT depend on the request's
 `ludsa_version_minor`. A server sends every field it supports, and an older
@@ -297,13 +306,17 @@ client skips what it does not recognise.
 | `error_detail` | 512 |
 | `server_desc` | 512 |
 
-A receiver MUST reject a field above its maximum. A server reports
+A receiver MUST reject a field above its maximum, except where §5 relaxes that
+for a server-sent value a client does not use. A server reports
 `REQUEST_TOO_LARGE`; §7 says what a client reports. A sender MUST NOT emit a
-field above its maximum, and no party may truncate a value to fit.
+field above its maximum, and no party may truncate a value to fit. A client
+asked to send one reports `INVALID_REQUEST` (§7) to its host application,
+without opening a connection.
 
-`error_detail`, `server_desc` and `authn_id` are the only fields a server sends
-and a client receives. A defect in one of them is a fault in the server that
-produced it, so a client MUST NOT report a request-side code for it. Nothing in
+`error_detail`, `server_desc` and `authn_id` are the only fields in this table
+that a server sends and a client receives. A defect in any field a server sends
+is a fault in the server that produced it, so a client MUST NOT report a
+request-side code for it. Nothing in
 the client's own request caused it. §5 says what a client does instead.
 
 When a server rejects a field for length, it SHOULD name the bound in
@@ -336,11 +349,15 @@ A tag is a 16-bit value that identifies a field and states how to handle it:
 
 | bits | meaning |
 |---|---|
-| 15 | required when set, optional when clear |
-| 14 | dynamic when set: a `u32 len` follows the tag |
-| 13–12 | width when bit 14 is clear: `00` = 1, `01` = 2, `10` = 4, `11` = 8 octets |
-| 11–8 | type, from the table below |
-| 7–0 | field number |
+| 15–8 | field number |
+| 7 | required when set, optional when clear |
+| 6 | dynamic when set: a `u32 len` follows the tag |
+| 5–4 | width when bit 6 is clear: `00` = 1, `01` = 2, `10` = 4, `11` = 8 octets |
+| 3–0 | type, from the table below |
+
+The field number is the high octet, so a tag's numeric order is its field
+number's order. §3.2's ascending rule therefore sorts by field number, and a
+field a later version adds sorts after every field already defined.
 
 `0xFFFF` is `TAG_END` and MUST NOT be used as a field tag.
 
@@ -359,8 +376,8 @@ from 1.
 as `REQUEST_MALFORMED` on any of three grounds, whether or not it recognises
 the tag, and whether the tag is required or optional:
 
-- bit 14 is set and either of bits 13-12 is set;
-- bit 14 disagrees with the width the tag's assigned type requires;
+- bit 6 is set and either of bits 5-4 is set;
+- bit 6 disagrees with whether the tag's assigned type is fixed or dynamic;
 - the field number is zero.
 
 The first and third read only bits every tag carries, so they reach a tag whose
@@ -373,7 +390,7 @@ A tag that cannot describe a field is not a field to skip, and skipping one
 would mean trusting a width the tag itself contradicts. Field number 0 is
 reserved, so no tag carrying it names a field, and rejecting it is what makes
 zero safe as the initial value of the previous-tag comparison §3.2 describes.
-Holding bits 13-12 at zero on a dynamic tag is what lets a receiver compare a
+Holding bits 5-4 at zero on a dynamic tag is what lets a receiver compare a
 tag as one whole 16-bit value. Only a tag that passes all three is compared
 against a schema.
 
@@ -386,7 +403,7 @@ For a tag it does not recognise:
 
 - **Required**: it MUST abort the exchange and return `REQUEST_MALFORMED`.
 - **Optional**: where the tag passed the shape checks above, it MUST skip the
-  field without error, using bit 14 and, when clear, bits 13–12 to know how many
+  field without error, using bit 6 and, when clear, bits 5–4 to know how many
   octets to skip.
 
 A value of type `integer` is unsigned, at the width its tag states. Version 1.0
@@ -396,7 +413,7 @@ defines no signed type.
 it: no overlong encoding, no code point from U+D800 to U+DFFF, and none above
 U+10FFFF. A receiver applies exactly this definition and no other.
 
-Type values `0x6` to `0xF` are unassigned. A tag carrying one is unrecognised
+Type values `0x5` to `0xF` are unassigned. A tag carrying one is unrecognised
 like any other, and the rule above for an unrecognised tag applies to it: an
 unassigned type is unknown rather than impossible, and skipping it is what keeps
 §4.1's promise about an optional field a later version adds.
@@ -413,20 +430,24 @@ Every enumeration in this protocol has the same shape:
 
 | value | meaning |
 |---|---|
-| 0 | the affirmative case, where the enumeration has one |
+| 0 | unassigned, and never affirmative |
 | 1 | the value a receiver uses for one it does not recognise |
-| 2 and up | specific outcomes |
+| 2 and up | specific outcomes, including the affirmative one where the enumeration has one |
 
 Each enumeration names its own 1, so the name says which enumeration it belongs
 to: `STATUS_UNKNOWN` (§5), `AUTHN_UNKNOWN` (§6.2.1), `SERVING_UNKNOWN` (§6.3).
 What this section fixes is the number, because that is what travels.
 
-A sender MUST NOT emit 1. A receiver that meets a value it does not recognise
-MUST treat it as 1, and MUST NOT treat it as the affirmative case.
+A sender MUST NOT emit 0 or 1. A receiver that meets either, or any other value
+it does not recognise, MUST treat it as 1, and MUST NOT treat it as an
+affirmative outcome.
 
-An enumeration whose affirmative outcome is stated elsewhere has no affirmative
-case, and leaves 0 unassigned. A receiver meeting 0 there treats it as it treats
-any other value it does not recognise.
+**Zero is never affirmative**, and the rule reaches past this section. A field
+number of 0 names no field (§3.3). `msg_type` `0x00` is `ERROR` (§5), which
+reports that the server decided nothing. A `ludsa_version_major` of 0 is a
+version nobody implements, so a message of nothing but zeroes stops at the first
+step of §4's order. A zero-filled buffer cannot express an approval anywhere in
+this protocol, in either direction.
 
 ## 4. Versioning
 
@@ -483,8 +504,8 @@ check takes the status of the earliest:
 1. `ludsa_version_major` implemented
 2. declared length within `MAX_LENGTH` and not below the minimum
 3. the declared octets all arrive
-4. framing, independent of any schema: tag shape (§3.3), ascending tag order,
-   each field's extent, `TAG_END`
+4. framing, independent of any schema: tag shape (§3.3), no tag lower than the
+   tag before it, each field's extent, `TAG_END`
 5. `msg_type` implemented, which binds a server; a client takes step 6 for any
    `msg_type` it did not expect
 6. for a response, a `msg_type` the request permits (§6)
@@ -497,9 +518,16 @@ check takes the status of the earliest:
 13. the decision
 
 Step 4 checks only what a receiver can check without knowing which schema
-applies. Steps 7 to 10 need the schema that `msg_type` selects, and cannot
-precede step 5. Step 6 binds a client only, since only a client has a request to
-compare against.
+applies. A tag equal to the tag before it is a repeat, which step 7 judges
+against the schema. Steps 7 to 10 need the schema that `msg_type` selects, and
+cannot precede step 5. Step 6 binds a client only, since only a client has a
+request to compare against.
+
+Steps 3 and 4 interleave. A receiver MAY report a step 4 fault it has already
+detected in octets it has read, without waiting for the declared length to
+arrive. A message that is both truncated and malformed in the octets that
+arrived may therefore take either status, and both conform. A message truncated
+with no fault in the octets that arrived is `REQUEST_INCOMPLETE`.
 
 Step 8 precedes step 9 because they yield different statuses. A field that is
 both over its maximum and holds a NUL is `REQUEST_TOO_LARGE`, and checking its
@@ -551,8 +579,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `error_detail` | `utf8` | optional | `0x4304` |
-| `status` | `enum`, 1 octet | required | `0x8101` |
+| `status` | `enum`, 1 octet | required | `0x0181` |
+| `error_detail` | `utf8` | optional | `0x0243` |
 
 A version 1.0 server MUST NOT emit a field in an `ERROR` message other than
 these two, whatever the request it answers. A receiver applies §3.3 to any other
@@ -576,15 +604,18 @@ the server decided, because an `ERROR` message means it decided nothing.
 | 10 | `RATE_LIMITED` | the server declined work the request would have required, under its own limit |
 | 11 | `PEERCRED_DENIED` | the server declined the connection on the peer's credentials |
 
-0 is unassigned, and this enumeration has no affirmative case (§3.4). A response
-to a request the server answered carries a message of that request's type, so
-there is no successful outcome for a status to state.
+This enumeration has no affirmative case at all, where §3.4 leaves 0 unassigned
+in every enumeration. A response to a request the server answered carries a
+message of that request's type, so there is no successful outcome for a status
+to state.
 
-Every code here is the server's statement about the request it was sent. The
+Every code a server emits is its statement about the request it was sent. The
 `REQUEST_` prefix says so on the five that name a fault in it. The other five
 describe the server's own state or the pair's compatibility, so they carry no
-direction and a client reports them unchanged. §7 gives a client the names for
-what it finds in a response.
+direction and a client reports them unchanged. `STATUS_UNKNOWN` is the eleventh
+and a server never emits it: §3.4 forbids a sender from emitting any
+enumeration's 1, and it is what a client records for a status it does not
+recognise. §7 gives a client the names for what it finds in a response.
 
 A client MUST NOT report a `REQUEST_` code for a fault it found itself. The
 names exist so a caller can tell the two apart: an operator reading
@@ -726,8 +757,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `server_desc` | `utf8` | optional | `0x4302` |
-| `uptime_seconds` | `integer`, 8 octets | optional | `0x3004` |
+| `server_desc` | `utf8` | optional | `0x0443` |
+| `uptime_seconds` | `integer`, 8 octets | optional | `0x0530` |
 
 `server_desc` names the server implementation and its release, for example
 `ludsa-k8s v1.2.3`. The format is conventional and this document does not
@@ -744,13 +775,13 @@ Request:
 
 | field | type | | | source | trust |
 |---|---|---|---|---|---|
-| `pid` | `integer`, 4 octets | optional | `0x2008` | client's own `getpid()` | self-reported, logging only |
-| `user` | `string` | optional | `0x4201` | client application | claim, MUST be verified |
-| `rhost` | `string` | optional | `0x4202` | host observation | trusted |
-| `ruser` | `string` | optional | `0x4204` | host application | claim |
-| `tty` | `string` | optional | `0x4206` | host application | claim |
-| `service` | `string` | required | `0xC203` | host configuration | trusted |
-| `credential` | `bytes` | required | `0xC405` | end user | the value to validate |
+| `service` | `string` | required | `0x01C2` | host configuration | trusted |
+| `credential` | `bytes` | required | `0x02C4` | end user | the value to validate |
+| `user` | `string` | optional | `0x0342` | client application | claim, MUST be verified |
+| `rhost` | `string` | optional | `0x0442` | host observation | trusted |
+| `ruser` | `string` | optional | `0x0542` | host application | claim |
+| `tty` | `string` | optional | `0x0642` | host application | claim |
+| `pid` | `integer`, 4 octets | optional | `0x0720` | client's own `getpid()` | self-reported, logging only |
 
 `user` is the identity that the remote party requests, and the remote party
 controls it. **It is optional, and sending it decides who enforces policy.** A
@@ -774,9 +805,17 @@ it declined. The other three name a reason, and §6.2.1 defines them.
 Naming a reason helps a legitimate client and whoever reads its logs. It also
 discloses. `AUTHN_DENIED_USER_UNKNOWN` tells a client which user names exist,
 and that reaches the remote party through whatever the host application does
-differently for an account it does not know. A server unwilling to disclose that
-MUST answer `AUTHN_DENIED` for every denial rather than for some, because a code
-used for all but one case names that case by omission.
+differently for an account it does not know. The disclosure does not stop at the
+codes a server names. A code left covering one case alone names it as surely as
+a code that says so, so a server that names some reasons discloses whatever its
+remaining code is left covering.
+
+Which reasons to name is a deployment decision, and this document does not make
+it. A server SHOULD offer both a mode that names a reason and one that answers
+`AUTHN_DENIED` for every denial, and leave the choice to whoever runs it.
+Diagnosis and traceability weigh against disclosure, and a reason often reaches
+a log and goes no further, since what reaches the remote party is the host
+application's behaviour rather than this protocol's.
 
 When `user` is absent, `OK` states that the credential is valid and that the
 server raised no objection of its own. A server MAY still apply policy to the
@@ -808,8 +847,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `authn_id` | `utf8` | optional | `0x4303` |
-| `result` | `enum`, 1 octet | required | `0x8102` |
+| `result` | `enum`, 1 octet | required | `0x0281` |
+| `authn_id` | `utf8` | optional | `0x0343` |
 
 `authn_id` is the canonical identity the server resolved, for example
 `system:serviceaccount:app:web`. A client that cannot use it ignores it. A
@@ -817,9 +856,15 @@ server MAY omit it whether or not the request carried a `user`, and version 1.0
 gives a client no way to require one. A client that omits `user` and cannot
 derive the identity from the credential therefore depends on being deployed
 against a server that supplies `authn_id`. That is an arrangement between a
-client and a deployment, not something the protocol settles. It MUST
-NOT contain a control character, on the terms §5 sets for `error_detail`, and a
-receiver MUST NOT reject it for containing one.
+client and a deployment, not something the protocol settles.
+
+A server answering from a cache, or from a result it derived mechanically rather
+than by consulting a live service, SHOULD carry the same fields it would have
+carried on the live path. Varying them is what leaves that arrangement
+unverifiable, since a deployment sees one exchange and generalises from it.
+
+`authn_id` MUST NOT contain a control character, on the terms §5 sets for
+`error_detail`.
 
 #### 6.2.1 Auth result
 
@@ -829,16 +874,17 @@ not a protocol failure: the server understood the request and answered it.
 
 | code | name | meaning |
 |---|---|---|
-| 0 | `OK` | permitted |
 | 1 | `AUTHN_UNKNOWN` | a result this implementation does not recognise |
-| 2 | `AUTHN_DENIED_CREDENTIAL` | credential invalid, expired, or wrong audience |
-| 3 | `AUTHN_DENIED_POLICY` | credential valid, but policy denies the identity, or denies it acting as `user` |
-| 4 | `AUTHN_DENIED_USER_UNKNOWN` | no mapping exists for the identity |
-| 5 | `AUTHN_DENIED` | the server declined, and does not say why |
+| 2 | `OK` | permitted |
+| 3 | `AUTHN_DENIED_CREDENTIAL` | credential invalid, expired, or wrong audience |
+| 4 | `AUTHN_DENIED_POLICY` | credential valid, but policy denies the identity, or denies it acting as `user` |
+| 5 | `AUTHN_DENIED_USER_UNKNOWN` | no mapping exists for the identity |
+| 6 | `AUTHN_DENIED` | the server declined, and does not say why |
 
 `AUTHN_DENIED` is always available and always sufficient. The three codes that
 name a reason are ones a server MAY use where it is willing to disclose that
-much, and a server that uses none of them is conforming.
+much. A server that uses none of them is conforming, and so is one that uses
+some (§6.2).
 
 Every code is available whether or not the request carried a `user`. With one,
 the reasons are about the requested `user`: whether it exists as far as this
@@ -885,8 +931,8 @@ Request:
 
 | field | type | | |
 |---|---|---|---|
-| `max_age` | `integer`, 4 octets | optional | `0x2002` |
-| `service` | `string` | optional | `0x4203` |
+| `max_age` | `integer`, 4 octets | optional | `0x0120` |
+| `service` | `string` | optional | `0x0242` |
 
 `max_age` bounds how stale the answer may be, in seconds. A server MUST NOT
 answer from data older than `max_age`, so zero requires a check before
@@ -909,18 +955,26 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `server_desc` | `utf8` | optional | `0x4302` |
-| `serving` | `enum`, 1 octet | required | `0x8103` |
+| `serving` | `enum`, 1 octet | required | `0x0381` |
+| `server_desc` | `utf8` | optional | `0x0443` |
 
 `serving` is the readiness signal:
 
 | code | name | meaning |
 |---|---|---|
-| 0 | `SERVING` | the server can authenticate a *new* principal right now |
 | 1 | `SERVING_UNKNOWN` | a value this implementation does not recognise |
-| 2 | `NOT_SERVING` | it cannot |
+| 2 | `SERVING` | the server can authenticate a *new* principal right now |
+| 3 | `NOT_SERVING` | it cannot |
 
-A server that has lost a dependency but can still answer from cache is serving.
+A server that has lost a dependency but still holds the material it needs to
+validate a new credential is serving. One validating against a previously
+downloaded key set is in that position: the signature checks without reaching
+the dependency, and revocation does not. A server MAY decline to answer at all
+while it cannot check revocation, and reports `NOT_SERVING` where it does.
+
+A server that can answer only for principals it has already decided is not
+serving, whatever it holds in cache. Answering a new principal is what `SERVING`
+states.
 
 The protocol defines no field that only some servers can populate. A server
 with more to report than `serving` and `server_desc` carry exposes it by its own
@@ -929,38 +983,41 @@ means, alongside a client that understands it.
 ### 6.4 Tag assignments
 
 Every tag in version 1.0, in the order §3.2 requires for emission. Tags sort by
-their whole value, so optional fields precede required ones. Each `msg_type` is
-a group with its own schema.
+their whole value and the field number is the high octet, so they sort by field
+number and a field a later version adds sorts after every field already defined.
+Within each group the required fields are numbered first. Each `msg_type` is a
+group with its own schema.
 
 | message type | tag | № | required | length | type | field |
 |---|---|---|---|---|---|---|
-| `ERROR` `0x00` | `0x4304` | 4 | no | dynamic | `utf8` | `error_detail` |
-| `ERROR` `0x00` | `0x8101` | 1 | **yes** | 1 octet | `enum` | `status` |
+| `ERROR` `0x00` | `0x0181` | 1 | **yes** | 1 octet | `enum` | `status` |
+| `ERROR` `0x00` | `0x0243` | 2 | no | dynamic | `utf8` | `error_detail` |
 | `PING_REQUEST` `0x01` | | | | | | *no fields* |
-| `PING_RESPONSE` `0x02` | `0x3004` | 4 | no | 8 octets | `integer` | `uptime_seconds` |
-| `PING_RESPONSE` `0x02` | `0x4302` | 2 | no | dynamic | `utf8` | `server_desc` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0x2008` | 8 | no | 4 octets | `integer` | `pid` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0x4201` | 1 | no | dynamic | `string` | `user` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0x4202` | 2 | no | dynamic | `string` | `rhost` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0x4204` | 4 | no | dynamic | `string` | `ruser` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0x4206` | 6 | no | dynamic | `string` | `tty` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0xC203` | 3 | **yes** | dynamic | `string` | `service` |
-| `AUTHENTICATE_REQUEST` `0x03` | `0xC405` | 5 | **yes** | dynamic | `bytes` | `credential` |
-| `AUTHENTICATE_RESPONSE` `0x04` | `0x4303` | 3 | no | dynamic | `utf8` | `authn_id` |
-| `AUTHENTICATE_RESPONSE` `0x04` | `0x8102` | 2 | **yes** | 1 octet | `enum` | `result` |
-| `STATUS_REQUEST` `0x05` | `0x2002` | 2 | no | 4 octets | `integer` | `max_age` |
-| `STATUS_REQUEST` `0x05` | `0x4203` | 3 | no | dynamic | `string` | `service` |
-| `STATUS_RESPONSE` `0x06` | `0x4302` | 2 | no | dynamic | `utf8` | `server_desc` |
-| `STATUS_RESPONSE` `0x06` | `0x8103` | 3 | **yes** | 1 octet | `enum` | `serving` |
+| `PING_RESPONSE` `0x02` | `0x0443` | 4 | no | dynamic | `utf8` | `server_desc` |
+| `PING_RESPONSE` `0x02` | `0x0530` | 5 | no | 8 octets | `integer` | `uptime_seconds` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x01C2` | 1 | **yes** | dynamic | `string` | `service` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x02C4` | 2 | **yes** | dynamic | `bytes` | `credential` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x0342` | 3 | no | dynamic | `string` | `user` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x0442` | 4 | no | dynamic | `string` | `rhost` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x0542` | 5 | no | dynamic | `string` | `ruser` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x0642` | 6 | no | dynamic | `string` | `tty` |
+| `AUTHENTICATE_REQUEST` `0x03` | `0x0720` | 7 | no | 4 octets | `integer` | `pid` |
+| `AUTHENTICATE_RESPONSE` `0x04` | `0x0281` | 2 | **yes** | 1 octet | `enum` | `result` |
+| `AUTHENTICATE_RESPONSE` `0x04` | `0x0343` | 3 | no | dynamic | `utf8` | `authn_id` |
+| `STATUS_REQUEST` `0x05` | `0x0120` | 1 | no | 4 octets | `integer` | `max_age` |
+| `STATUS_REQUEST` `0x05` | `0x0242` | 2 | no | dynamic | `string` | `service` |
+| `STATUS_RESPONSE` `0x06` | `0x0381` | 3 | **yes** | 1 octet | `enum` | `serving` |
+| `STATUS_RESPONSE` `0x06` | `0x0443` | 4 | no | dynamic | `utf8` | `server_desc` |
 
-One tag appears in two groups: `0x4302` is `server_desc` in `PING_RESPONSE` and
+One tag appears in two groups: `0x0443` is `server_desc` in `PING_RESPONSE` and
 in `STATUS_RESPONSE`, which is the same field with the same meaning. No tag
 names two different fields.
 
-A tag's required bit, width and type are fixed by the field it carries, but its
-field number is free, so a collision between two different fields is a choice
-rather than a consequence. §3.3 matches a tag against the group its `msg_type`
-selects, so one would be harmless to a conforming receiver; the numbering avoids
+A tag's width and type are fixed by the field it carries, and its required bit
+by the field's role in that message type. Its field number is free, so a
+collision between two different fields is a choice rather than a consequence.
+§3.3 matches a tag against the group its `msg_type` selects, so one would be
+harmless to a conforming receiver; the numbering avoids
 it anyway, because a decoder that reads fields before it consults the type then
 finds an unrecognised optional tag and skips it, rather than reading one field's
 value as another's.
@@ -974,8 +1031,10 @@ becomes retired and is never reassigned (§4.1).
 A receiver MUST reject each of the following with the status shown. *Against*
 names the side a case can be constructed for: every version 1 `string` field is
 a request field, and a request has no `msg_type` a response permits, so some
-cases exist in one direction only. *Needs* names a fixture this document does
-not define.
+cases exist in one direction only. Case 21 is marked `server` on other grounds.
+It can be constructed against a client, but §5 makes a client's outcome there a
+SHOULD, so the table of SHOULD-report cases below carries that direction.
+*Needs* names a fixture this document does not define.
 
 Every case driven against a server is answerable, because each carries at least
 a version word and a server can answer in its own major version (§2). A case
@@ -988,15 +1047,15 @@ response name §7 pairs with the status shown.
 | 2 | A declared length above `MAX_LENGTH` | either | `REQUEST_TOO_LARGE` | |
 | 3 | A declared length below the minimum for the version | either | `REQUEST_MALFORMED` | |
 | 4 | A field length extending beyond the declared message length | either | `REQUEST_MALFORMED` | |
-| 5 | A tag repeated in a message type that permits one | either | `REQUEST_MALFORMED` | |
-| 6 | Tags out of ascending order | either | `REQUEST_MALFORMED` | |
+| 5 | A tag appearing twice in a message type that permits it only once | either | `REQUEST_MALFORMED` | |
+| 6 | A tag lower than the tag before it | either | `REQUEST_MALFORMED` | |
 | 7 | An unrecognised **required** tag | either | `REQUEST_MALFORMED` | |
 | 8 | A message not terminated by `TAG_END` | either | `REQUEST_MALFORMED` | |
 | 9 | Trailing octets after `TAG_END` within the declared length | either | `REQUEST_MALFORMED` | |
-| 10 | A tag with bit 14 set and either of bits 13-12 set | either | `REQUEST_MALFORMED` | |
-| 11 | A tag whose assigned type disagrees with bit 14 | either | `REQUEST_MALFORMED` | |
+| 10 | A tag with bit 6 set and either of bits 5-4 set | either | `REQUEST_MALFORMED` | |
+| 11 | A tag whose assigned type disagrees with bit 6 | either | `REQUEST_MALFORMED` | |
 | 12 | A tag whose field number is 0 | either | `REQUEST_MALFORMED` | |
-| 13 | A NUL octet in a `string` or `utf8` field | server | `REQUEST_MALFORMED` | |
+| 13 | A NUL octet in a `string` field | server | `REQUEST_MALFORMED` | |
 | 14 | A missing required field for the message type | either | `REQUEST_MALFORMED` | |
 | 15 | The message ending before it is complete, after `ludsa_version_major` has been read | either | `REQUEST_INCOMPLETE` | |
 | 16 | A `msg_type` it does not accept, including a response type or `ERROR` | server | `REQUEST_UNSUPPORTED` | |
@@ -1004,11 +1063,12 @@ response name §7 pairs with the status shown.
 | 18 | A STATUS `max_age` it cannot satisfy under its own limit | server | `RATE_LIMITED` | F2 |
 | 19 | The request deadline expiring, after `ludsa_version_major` has been read | server | `REQUEST_TIMEOUT` | |
 | 20 | A response carrying a `msg_type` the client implements, which the request does not permit (§6) | client | `RESPONSE_MALFORMED` | |
-| 21 | A field whose value exceeds its §3.1 maximum, in an otherwise well-framed message | either | `REQUEST_TOO_LARGE` | |
+| 21 | A field whose value exceeds its §3.1 maximum, in an otherwise well-framed message | server | `REQUEST_TOO_LARGE` | |
 | 22 | An unimplemented `msg_type` in a message that also has a repeated tag | either | `REQUEST_UNSUPPORTED` | |
 | 23 | An unrecognised `service` in a message that also omits `credential` | server | `REQUEST_MALFORMED` | F1 |
 | 24 | A response of exactly one octet, then end of file | client | `RESPONSE_INCOMPLETE` | |
 | 25 | A response carrying a `msg_type` the client does not implement | client | `RESPONSE_UNSUPPORTED` | |
+| 26 | A tag with bit 6 set and either of bits 5-4 set, in a message whose `msg_type` the receiver does not implement | either | `REQUEST_MALFORMED` | |
 
 Every version 1.0 `utf8` field is one a client may reject for its content. §5
 makes a defect in `error_detail`, `server_desc` or `authn_id` a fault in the
@@ -1021,8 +1081,12 @@ Both conform, so it is not a case here and a driver MUST NOT record either as a
 failure. Case 24 is its counterpart on the other side, where one octet is a
 report rather than a silence.
 
+A message both truncated and malformed in the octets that arrived may draw
+either status (§4). Both conform, so it is not a case here and a driver MUST NOT
+record either as a failure.
+
 Some of these depend on how the peer under test is configured, which this
-document does not specify. A driver MUST be given all four:
+document does not specify. A driver MUST be given all five:
 
 - **F1**: a `service` value the peer recognises, and one it does not.
 - **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
@@ -1036,6 +1100,9 @@ document does not specify. A driver MUST be given all four:
 - **F4**: the bound the peer sets on the drain (§3). A server whose bound is
   shorter than the driver's round trip has stopped draining legitimately and
   cannot be told from one that never drained.
+- **F5**: the server identity the client under test is configured to expect, and
+  a driver socket owned by a different uid. A client configured with none owes
+  nothing under §2 and cannot run the case below.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1065,6 +1132,31 @@ length out of play for `VERSION_UNSUPPORTED`, the driver does not half-close, so
 there is no end of file, and an envelope plus a kilobyte is far below
 `2 x MAX_LENGTH`.
 
+A driver checks the encoding of every response it receives: tags in ascending
+order, each appearing at most once (§3.2). One further case pins what no other
+input reaches, since a server's own version word is not something a request can
+provoke:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| Any request carrying a `ludsa_version_minor` other than the server's own, which a `PING_RESPONSE` envelope reports (§6.1) | server | a response carrying the server's own `ludsa_version_minor`, not the one sent | |
+
+§3.2's rule against emitting an optional field that has no value is not
+driveable. A zero-length value is a value (§3.2), so nothing distinguishes the
+two from outside.
+
+One further case observes what a client does before it writes anything, which
+§2's conditional obligation reaches and no message can. The driver accepts the
+connection and writes nothing:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A connection accepted by a peer whose identity is not the one the client was configured to expect | client | the client writes no octet and reports `CONNECTION_FAILED` | F5 |
+
+This is the only case that turns on who owns the socket rather than on the
+octets crossing it, so a driver needs two uids where every other case needs a
+byte string.
+
 It SHOULD reject the following. A conforming receiver may accept or reject it,
 so it carries no expected outcome:
 
@@ -1089,12 +1181,13 @@ own, in either direction, and MUST skip an unrecognised **optional** tag without
 error. It MUST accept a message whose declared length is exactly the minimum for
 the version, which a `PING_REQUEST` carrying no fields is, and a field whose
 value is exactly its §3.1 maximum. It MUST report an enumerated value it does
-not recognise as that enumeration's 1 (§3.4) and MUST NOT report it as the
-affirmative case, so a `result` of 200 is `AUTHN_UNKNOWN` and never `OK`.
+not recognise as that enumeration's 1 (§3.4) and MUST NOT report it as an
+affirmative outcome, so a `result` of 200 is `AUTHN_UNKNOWN` and never `OK`, and
+so is a `result` of 0.
 
-**A client reports a response fault to its caller.** It has no status to send,
-having already sent its request and half-closed, and a fault it found in a
-response is not a statement about that request. These are the names it SHOULD
+**A client reports a fault to its caller.** It has no status to send: a fault it
+found in a response is not a statement about the request it sent, and a request
+it never sent is not a statement about anything. These are the names it SHOULD
 use. None of them appears on the wire, and a client that uses its own names is
 still conforming:
 
@@ -1105,7 +1198,14 @@ still conforming:
 | `RESPONSE_INCOMPLETE` | a response started and stopped part-way, at end of file or at the client's deadline |
 | `RESPONSE_ABSENT` | no response octet arrived, and the server closed |
 | `RESPONSE_TIMEOUT` | no response octet arrived, and the client's deadline expired |
-| `CONNECTION_FAILED` | the client never established a connection |
+| `CONNECTION_FAILED` | the client never established a connection it was willing to use |
+| `INVALID_REQUEST` | the caller's own input could not be carried in a conforming request |
+
+A client whose host wants a distinct code per condition MAY subdivide these,
+`INVALID_REQUEST_CREDENTIAL_TOO_LARGE` and so on. What it MUST NOT do is report
+a code a server sends for a fault it found itself. §5's statuses describe a
+request a server received, and a request that was never sent gives them nothing
+to describe.
 
 The table above binds a client by its conditions, not by these names. Where it
 gives a status for a case marked `either`, a client detects the same condition
@@ -1113,8 +1213,8 @@ and reports the response name beside it here.
 
 A code that carries no direction serves both sides. A client reports
 `VERSION_UNSUPPORTED` for a response major version it does not implement, and
-relays `UNAVAILABLE`, `INTERNAL_ERROR` and `RATE_LIMITED` as the server sent
-them.
+relays `UNAVAILABLE`, `INTERNAL_ERROR`, `RATE_LIMITED` and `PEERCRED_DENIED` as
+the server sent them.
 
 A client that reads no response octet reports `RESPONSE_ABSENT` where the server
 closed and `RESPONSE_TIMEOUT` where its own deadline expired. One that reads any
@@ -1208,7 +1308,18 @@ result out of it.
 | `UNAVAILABLE` | `PAM_AUTHINFO_UNAVAIL` |
 | `INTERNAL_ERROR` | `PAM_SYSTEM_ERR` |
 | `RATE_LIMITED` | `PAM_AUTHINFO_UNAVAIL` |
-| `PEERCRED_DENIED` | `PAM_SYSTEM_ERR` |
+| `PEERCRED_DENIED` | `PAM_AUTHINFO_UNAVAIL` |
+
+These are defaults, not requirements. A client MAY let a deployment override the
+code it returns for an outcome, and one that does SHOULD keep these as its
+defaults, so two clients behave alike where nobody has configured otherwise. A
+client MUST NOT let an override map a `result` other than `OK` onto success, or
+turn any failure into one.
+
+`CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
+ends, a client and a server that a configuration does not permit to talk. A
+client that offers an override SHOULD apply one setting to both, so an
+administrator who changes how a peer refusal behaves changes all of it.
 
 The response codes §7 gives a client:
 
@@ -1220,6 +1331,7 @@ The response codes §7 gives a client:
 | `RESPONSE_ABSENT` | `PAM_AUTHINFO_UNAVAIL` |
 | `RESPONSE_TIMEOUT` | `PAM_AUTHINFO_UNAVAIL` |
 | `CONNECTION_FAILED` | `PAM_AUTHINFO_UNAVAIL` |
+| `INVALID_REQUEST` | `PAM_SYSTEM_ERR` |
 
 `RESPONSE_MALFORMED` is evidence of a bug in the server (§5), so it needs a
 person. `RESPONSE_ABSENT` means the server accepted the connection and then said

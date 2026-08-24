@@ -134,11 +134,18 @@ fallback for a server that cannot set the group is to open the mode until things
 work. That trades a startup failure nobody can miss for a socket anyone on the
 box can authenticate through, and nothing would ever surface it.
 
-**Why a stale socket must be unlinked, and why only a socket.** The inode
+**Why a stale socket must be cleared, and why only a socket.** The inode
 survives a crash, and `bind()` would otherwise fail with `EADDRINUSE`.
 Unqualified, though, that rule deletes whatever is at the configured path. Point
 it at a regular file by mistake and the server removes it at startup. Refusing
 to start turns a destructive misconfiguration into a loud one.
+
+The rule states a property rather than a mechanism, because the two publishing
+routes reach it differently. One unlinks the stale socket and binds in place;
+the other binds to a temporary name and renames over it, which frees the
+replaced inode just as an unlink would. An earlier draft required the unlink,
+which the second route does not perform, so a recommended implementation
+violated a MUST on a literal reading.
 
 **Why there is no rule about the socket's directory.** A user who can write to
 the directory can unlink the socket and bind their own at the same path. The
@@ -193,12 +200,30 @@ keeps one rule about when a server may speak rather than a rule with an
 exception. Where the client sends nothing, the server falls back to its own
 version like any other answer without one.
 
+**Why a client has a name for a request it cannot send.** §3.1 forbids a sender
+emitting a field above its maximum and forbids anyone truncating one to fit, and
+for four rounds it said nothing about what a client does when its own caller
+hands it 20000 octets of credential. The obvious name is barred: §5 keeps
+`REQUEST_` codes for a server's statement about a request it received, and a
+request that was never sent gives one nothing to describe.
+
+A rule with two MUSTs and no way to report its own violation gets implemented as
+truncate and hope, which is the identity-collision hazard this document warns
+about for `authn_id` arriving by another road. `INVALID_REQUEST` closes it, and
+a client whose host wants finer codes may subdivide it, since the client-local
+names are a SHOULD and one using its own is conforming. The weight sits on the
+prohibition rather than the name.
+
+An earlier round ruled the same thing and the ruling never reached the
+specification, which is how the gap survived a rename that would have
+contradicted it.
+
 **Why a client's own deadline is `RESPONSE_TIMEOUT`.** It had two candidate
 statuses and §5 supported both readings. The rename settled half of it:
 `REQUEST_TIMEOUT` is the server's request deadline and a client cannot report
 it, and `UNAVAILABLE` lost its client clause when the response codes were split
-out. What was left was which client code covers it, and the three existing ones
-are all defined by end of file, which a deadline expiry is not.
+out. What was left was which client code covers it, and the three that existed
+then were all defined by end of file, which a deadline expiry is not.
 
 A fourth code keeps a distinction worth keeping, but not the one it first
 appears to. The codes split on what arrived before they split on what ended it.
@@ -317,9 +342,10 @@ no invariant to police, and a status the peer does not recognise reaches the
 same §3.4 rule as any other unrecognised enumerated value.
 
 `0x00` because `ERROR` is not a request type. It sits outside the `0x01` to
-`0x03` run rather than in the middle of it, `0x04` onward stays free for request
-types, and a message of nothing but zeroes reads as an error rather than as
-anything affirmative.
+`0x06` run of request and response pairs rather than in the middle of it, `0x07`
+onward stays free for a later pair, and a message of nothing but zeroes reads as
+an error rather than as anything affirmative. §3.4 later generalised that last
+property to every enumeration.
 
 **Why a response echoes the major version but not the minor.** A server that
 implements several major versions must answer in the one it was addressed in.
@@ -442,7 +468,7 @@ room for those later additions.
 What a server gives up is small. The number that threatens it is the accepted
 maximum multiplied by its concurrency limit, and it still sets the concurrency
 limit. The deadline ruling does not carry across: a server refusing an unbounded
-wait defends against something it cannot predict, and a server refusing 64KB per
+wait defends against something it cannot predict, and a server refusing 32KB per
 connection in flight does not.
 
 **Why the constant bounds the declared length rather than the message.** Named
@@ -575,15 +601,15 @@ carries the verdict. Both were prose scoped by field name, which a decoder
 written from the tag table never sees.
 
 **Why an unassigned type is skipped but a contradictory tag is not.** Both are
-tags a receiver cannot fully account for, and they fail differently. Bits 13-12
-set while bit 14 is set, or a type whose table entry says dynamic on a tag whose
-bit 14 is clear, describe a field that cannot exist. Rejecting those is what
+tags a receiver cannot fully account for, and they fail differently. Bits 5-4
+set while bit 6 is set, or a type whose table entry says dynamic on a tag whose
+bit 6 is clear, describe a field that cannot exist. Rejecting those is what
 keeps a tag comparable as one 16-bit value, which §3.2's ordering check depends
 on.
 
 A type value the document has not assigned is not impossible, only unfamiliar,
 and rejecting it would break the promise §4.1 makes about an optional field a
-later version adds. Skipping needs bit 14 and, when clear, bits 13-12, and never
+later version adds. Skipping needs bit 6 and, when clear, bits 5-4, and never
 the type, so a receiver can skip a field of a type it has never heard of. The
 consistency check cannot reach an unassigned type for the same reason it is safe
 to skip one: nothing says whether it is fixed or dynamic.
@@ -642,10 +668,6 @@ it from the tag, and a field added later inherits the rule by being given the
 type. `server_desc` gained the obligation that way, having gone without one
 while it was prose.
 
-`authn_id` stays a `string` despite being server-originated. The server resolves
-it from a backend, and a directory could return an identity in bytes whose
-encoding it does not know, which is `user`'s problem one layer removed.
-
 **Prior art.** Encoding the unknown-handling rule in the identifier is a known
 technique, although this arrangement of bits is particular to this protocol. Two
 protocols do the same thing:
@@ -683,20 +705,31 @@ encoding, and none of them will approach 255 values. One octet also makes the
 three tags identical within their own groups, which §6.4 already permits and
 which removes a difference carrying no information.
 
-**Why the affirmative case is zero.** A zero value is the one an implementation
+**Why zero is never affirmative.** A zero value is the one an implementation
 produces by accident: Go's zero value, a `memset`, a map miss, a `switch` with
-no default. Putting the unrecognised case there instead would make each of those
-fail closed, and it was considered for that reason.
+no default. For three rounds `OK` and `SERVING` sat at 0 anyway, on the ground
+that the accident is a defect in one implementation and that inverting the
+enumerations, putting the unrecognised case at 0 and `OK` at 1, taxes every
+correct implementation forever.
 
-It was not adopted, because the accident is a defect in one implementation with
-ordinary fixes available to it, and the inversion taxes every correct one
-forever. Success as one specific value and failure as everything else is the
-convention for enumerated status, so `OK` at 1 invites a receiver to test
-against 0 by habit. The rule that an unrecognised value is never affirmative
-already covers the whole open-ended tail, including every value a later version
-adds, and the only hole left is zero itself. On the receiving side that hole
-needs a client to skip a status check it has to write anyway, since
-`UNAVAILABLE` and a denial go to different PAM codes.
+That reasoning was answering a proposal nobody ended up making. Leaving 0
+unassigned and putting `OK` at 2 keeps success as one specific value and failure
+as everything else, which is the convention the decline was defending, and it
+invites nobody to test against 0, because 0 means nothing. The argument against
+`OK` at 1 never reached it.
+
+What settled it was that the document had already accepted the argument once.
+`status` leaves 0 unassigned so a zeroed `ERROR` fails closed, and no reason was
+ever given why the verdict enumeration deserved less. The earlier reasoning was
+also entirely receiver-side, where the accident that matters is a sender's: an
+empty response struct in Go emits a structurally perfect approval, every §3.4
+rule that would catch it addresses a receiver, and no conformance case can
+provoke a server's internal-failure path.
+
+The rule now holds across the protocol rather than in this section. Field number
+0 names no field, `msg_type` `0x00` is `ERROR`, and major version 0 is
+implemented by nobody, so a zero-filled buffer cannot express an approval
+anywhere.
 
 **Why value 1 is never sent.** It exists so an unrecognised value has a name
 rather than a special case. A receiver substitutes it, and its own API can
@@ -716,6 +749,15 @@ the number is what travels.
 **Why it sits at 1 rather than last.** Values added later append at the end, so
 a sentinel at the end would move each time one was added. It is the one value
 implementations pin into their own APIs, so it is the one that must not move.
+
+**Why `SERVING` is about a new principal.** A server holding a verdict cache can
+answer for principals it has already decided, and that is not readiness: the
+traffic a readiness probe protects is the traffic the server has not seen. A
+server validating against a previously downloaded key set is the other case. It
+can check a credential it has never met, so it can serve a new principal, and
+what it has lost is revocation rather than validation. Naming the new principal
+separates the two, and a probe reading `serving` as liveness would keep routing
+to the first.
 
 **Why `serving` names its values rather than meaning zero and nonzero.** A field
 where any nonzero value means yes can never gain a third state. A later version
@@ -797,6 +839,16 @@ the order a decoder is written in, so the rule costs nothing to follow.
 Framing before `msg_type` is the part worth stating. It means a server fully
 parses a request it is about to refuse, which is cheap on a bounded message.
 
+Steps 3 and 4 are the one pair that interleaves, and the fifth round had to say
+so. A receiver cannot know whether the declared octets will all arrive until
+they do, so ordering arrival strictly before framing would make it defer every
+framing verdict to the end of the message. §3 is built the other way: its drain
+protocol exists for nothing but rejecting before the message has arrived, and a
+client's fixed receive buffer depends on the same freedom. So a message both
+truncated and malformed in the octets that arrived takes either status, and §7
+excludes it as a case rather than choosing one, on the same footing as a request
+that stalls before its version word.
+
 What goes in that pass is only what holds without a schema, and the boundary
 moved in the fifth round. It used to include the at-most-once rule, on the
 reasoning that a newer client sending a later message type expects
@@ -876,8 +928,8 @@ standing for a type that was never read.
 may never carry, which takes two rules to police: one forbidding a sender from
 emitting it and one telling a receiver what to do with it anyway. Leaving 0
 unassigned deletes both. It also makes a zeroed `ERROR` message fail closed
-through the rule §3.4 already has, rather than decoding to the affirmative value
-and needing a further exception to stop it.
+through §3.4, which is the rule the other two enumerations were later brought
+into line with.
 
 **Why two enumerations rather than one.** A status says how the server handled
 the message. A result says what it decided. One enumeration would make every
@@ -893,10 +945,11 @@ names for what a client found in a *response*, which gave one name two opposite
 meanings and left a caller unable to act on either.
 
 The `REQUEST_` prefix says what the enumeration always meant. It goes on the
-five codes that name a fault in the request, and not on the four that describe
+five codes that name a fault in the request, and not on the five that describe
 the server's own state or the pair's compatibility, because those carry no
-direction to state. A naming scheme that half the codes follow looks arbitrary
-until you notice the other half are not about the request at all.
+direction to state. `STATUS_UNKNOWN` is the eleventh and no server emits it. A
+naming scheme that half the codes follow looks arbitrary until you notice the
+other half are not about the request at all.
 
 The response codes are deliberately not members of that enumeration. A server
 can never send one, so giving them numbers would spend wire vocabulary on values
@@ -1154,6 +1207,21 @@ does not need the server to tell it what it says. One that cannot, or that would
 rather not depend on its own reading agreeing with the server's, asks for a
 server that supplies it.
 
+**Why the cached and derived paths carry a SHOULD.** Both reviewers in the fifth
+round found the same hole: presence is a property of a response, not of a
+server, so the arrangement above cannot be checked. A deployment tries one
+credential, sees `authn_id`, and generalises, and a server that fills the field
+from its upstream and omits it on a cache hit is conforming. The failure is
+fail-closed but intermittent, and it presents as a server fault.
+
+The rule names the mechanism rather than demanding consistency outright. Both
+reviewers proposed the latter, one globally and one per `service`, and either
+forbids more than the hole needs. What actually varies is the degraded path: a
+cache that stored a verdict without an identity, or a validation done from
+material the server already holds. Asking those to match the live path closes it
+and leaves a server free to route two services to backends that genuinely
+differ.
+
 **Why `service` is safe to route on.** It derives from the `pamservice=` option
 on the matched `pg_hba.conf` line, which the remote party cannot influence. This
 is the recurring *checked, never consulted* principle: a value the remote party
@@ -1230,11 +1298,20 @@ credential asserted it was good, and a client reading §6.2.1's two-step split
 concluded the credential step had passed. `AUTHN_DENIED` makes the private
 choice truthful.
 
-**Why a server that will not disclose must use `AUTHN_DENIED` throughout.** A
-code reserved for the cases a server is willing to explain names the remaining
-case by omission. Answering `AUTHN_DENIED_CREDENTIAL` for a bad credential and
-`AUTHN_DENIED` for everything else tells a client that `AUTHN_DENIED` means the
-user is unknown. The rule has to bind every denial or it binds none.
+**Why naming a reason is left to a deployment.** A code reserved for the cases a
+server is willing to explain names the remaining case by omission, where one
+case is all that remains. Answering `AUTHN_DENIED_CREDENTIAL` for a bad
+credential, `AUTHN_DENIED_POLICY` for a policy denial and `AUTHN_DENIED` for
+everything else tells a client that `AUTHN_DENIED` means the user is unknown.
+Leaving two cases under it discloses nothing.
+
+An earlier draft made this a MUST binding every denial, on the ground that a
+rule of that shape cannot drift as a policy set changes. It was overruled. Which
+code answers a given denial is a policy and configuration question rather than a
+protocol one, and it trades diagnosis and traceability against disclosure. The
+reason often reaches a log and goes no further. A server is asked to offer both
+modes so the trade stays with whoever runs it, and one that offers only the
+discreet mode is conforming.
 
 **What the earlier framing got wrong.** It presented the choice as a question
 about the server's own user model, authoritative or rules-only, and sent the
@@ -1323,7 +1400,7 @@ have put a release string where an identity belongs. Numbered apart, the same
 decoder meets an unrecognised optional tag and skips it, so the field comes out
 absent and §6.2 denies.
 
-`0x4302` is still `server_desc` in two response groups. That one is the same
+`0x0443` is still `server_desc` in two response groups. That one is the same
 field with the same meaning, so there is nothing to confuse.
 
 Field numbers are unassigned rather than reserved, because an unassigned
@@ -1359,6 +1436,14 @@ non-conforming. The decision case needs a credential the peer accepts and a
 `user` its policy refuses, which is a property of a deployment rather than of
 this protocol. Naming what the driver must be told turns each from a silent
 assumption into an input.
+
+F5 is the odd one. §2's identity check binds only a client that was configured
+with an expected identity, so the fixture supplies both halves of that
+configuration, and the case turns on who owns the socket rather than on the
+octets crossing it. It went in during the fifth round, when a reviewer pointed
+out that the conditional MUST had been chosen over a bare SHOULD precisely
+because it is observable, and that nothing in §7 observed it. The rule was sound
+and its justification was not delivered.
 
 **Why the client's line sits at one octet and the server's at two.** The two
 thresholds answer different questions. A server needs `ludsa_version_major`
@@ -1458,6 +1543,43 @@ admits a caller the server denied. That is a fail-open produced by a convention
 rather than by a wire rule, and no conformance case can see it. Binding the
 client to document it puts the obligation on someone the specification can bind,
 which a rule aimed at a deployment would not.
+
+**Why the three peer-identity outcomes share a code.** A socket the client
+cannot open, a peer that is not the one the client expects, and a server that
+refuses the peer it got are one condition seen from three positions: these two
+processes are not permitted to talk, because a configuration says so. They all
+map to `PAM_AUTHINFO_UNAVAIL`. An earlier draft sent `PEERCRED_DENIED` to
+`PAM_SYSTEM_ERR`, which made the server's half of the check stop a stack that
+the client's half and the filesystem's half let fall through.
+
+The objection to falling through is that an attacker who can provoke a denial
+forces the stack on to whatever is configured next. That is true, and it is
+equally true of a wrong socket mode and of an unreachable server, both of which
+already fall through, so it argues against the whole `PAM_AUTHINFO_UNAVAIL`
+design rather than against this row. The narrower version is better: a peercred
+denial reproduces reliably where an unreachable directory is transient, so an
+operator who sees only a fall-through never learns the allowlist is wrong. That
+is an argument for logging it, not for a different code.
+
+**Why the table is a default rather than a fixed mapping.** The appendix exists
+because two clients mapping one outcome differently give an operator a stack
+that behaves differently against each, on an identical wire trace. That argues
+for a stated default, not for a fixed one. A deployment may reasonably want a
+peer refusal to stop its stack where another wants it to fall through, and the
+choice belongs to whoever runs it.
+
+Naming defaults and permitting an override serves both: two clients nobody has
+configured behave alike, and a deployment that needs something else says so
+rather than patching a module. The one thing an override may not do is turn a
+failure into a success, which is the only direction in which a configuration
+mistake here is unrecoverable.
+
+The peer-identity outcomes are asked to move together for the same reason they
+share a default. Two of the three already do, since a socket the client cannot
+open and a peer it did not expect both report `CONNECTION_FAILED`; only
+`PEERCRED_DENIED` could drift. An administrator deciding that a peer refusal
+should stop the stack means all of it, not the half the server happened to
+detect.
 
 **Why the rest is non-normative.** No mapping is right for every host.
 `pg_ludsa` has no PAM, and a client with a host that distinguishes more finely

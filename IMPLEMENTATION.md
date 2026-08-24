@@ -14,7 +14,7 @@ standard library makes some of these rules awkward to express correctly.
 The specification sets no values. These are a coherent starting set, and all of
 them should be configurable.
 
-The transport is local and messages are bounded at 64KB, so a healthy exchange
+The transport is local and messages are bounded at 32KB, so a healthy exchange
 completes in single-digit milliseconds. PostgreSQL's `authentication_timeout`
 defaults to 60 seconds, which is the ceiling a client's overall deadline has to
 sit inside. That suggests a client overall deadline in the high hundreds of
@@ -89,7 +89,7 @@ stop going unimplemented.
 has arrived, with no error and nothing to say the buffer is short. Every vector
 in `testdata` is a few hundred octets and arrives whole, so a server built on
 one `Read` passes the entire suite and fails on the first production JWT, where
-a 32KB `credential` spans several segments. `io.ReadFull` is the loop, and the
+a 16KB `credential` spans several segments. `io.ReadFull` is the loop, and the
 envelope needs it as much as the body does.
 
 Writes need no equivalent. `net.Conn.Write` returns an error if it writes fewer
@@ -141,8 +141,8 @@ too small, and the obvious fixes for it are all unnecessary. Four rules combine:
   version 1. Nothing a client already stores can grow.
 - A minor version can therefore only add fields, and §4.1 makes an added field
   optional.
-- §3.3 makes an optional field skippable, using bit 14 and, when clear, bits
-  13-12 to know how many octets to skip. A receiver skips it knowing nothing
+- §3.3 makes an optional field skippable, using bit 6 and, when clear, bits
+  5-4 to know how many octets to skip. A receiver skips it knowing nothing
   else about it.
 - §3 says a receiver need not retain the whole declared length, provided it
   reads all of it and interprets nothing beyond.
@@ -311,6 +311,11 @@ directory, at the cost of the server needing to be in the target group or hold
 Verify either on the target platform before relying on it. Umask behaviour on
 socket inodes is not uniform.
 
+Measured on Linux on 2026-08-23, Debian 12 on kernel 7.0.12: with umask `0117`
+under a `02770` directory, a bound socket comes out `0660` with the directory's
+group and no setgid bit. `S_ISGID` propagates to newly created subdirectories,
+not to files or sockets, so the first route produces a socket §2 accepts.
+
 **Go: a few problems with the second route.**
 
 `net.Listen("unix", path)` exposes no mode option and binds using the process
@@ -346,15 +351,24 @@ is 390 and `0o660` is 432, and that socket is world-writable and inaccessible to
 its own group. But `st.st_mode & ~0660` is non-zero for *every* socket including
 a correct one, because `st_mode` carries the file type and `S_IFSOCK` is
 `0140000`. Go's `os.FileMode` carries `ModeSocket` the same way, and its
-`Perm()` masks to `0777`, which drops the setgid bit the setgid-directory route
-above can leave on the socket. A server that omits the mask refuses to start on
+`Perm()` masks to `0777`, which drops the three bits `07000` that §2 forbids
+just as firmly. A server that omits the mask refuses to start on
 a socket it has just created correctly.
 
 ## Detecting a stale socket
 
-§2 requires unlinking a stale socket before binding, and never unlinking a path
-that is not a socket. It does not say how to tell stale from live, because that
-is a detection strategy rather than an observable property.
+§2 requires a stale socket to be gone from the published path before the server
+publishes its own, and requires the is-a-socket test before anything at that
+path is removed or replaced. It does not say how to tell stale from live,
+because that is a detection strategy rather than an observable property.
+
+**`rename()` does not perform that test for you.** Measured on Linux on
+2026-08-23: renaming a socket over a regular file succeeds silently and frees
+the replaced inode, and renaming over an existing bound socket succeeds too,
+leaving the old server holding a descriptor no new client can reach. Only a
+directory at the target refuses, with `EISDIR`. A server publishing by
+`rename()` therefore destroys whatever is at its configured path unless it has
+already applied §2's test.
 
 - **Unconditional**, after the is-a-socket check. What nearly everyone writes,
   and the only thing that works after a `SIGKILL`. Its cost is that a second
@@ -455,7 +469,7 @@ implement is `REQUEST_MALFORMED`. §7 cases 22 and 5 are the pair that pin it.
 Run the schema-independent pass over the whole message first, then dispatch,
 then apply the schema. A server that dispatches on `msg_type` before checking
 tag shape or extents answers `REQUEST_UNSUPPORTED` to a message that is
-structurally broken, which case 23 catches through its own combination.
+structurally broken, which case 26 catches through its own combination.
 
 ## Emitting fields
 
@@ -513,13 +527,18 @@ and answers `OK` on any valid credential, while the client that sent the empty
 `user` believes it was checked. Nothing on the wire distinguishes that from a
 correct answer.
 
-**A field absent from the wire decodes as the affirmative value.** §5 has an
-`ERROR` message carry no field but `status` and `error_detail`, so a `result`
-decoded from one was never sent, and its zero value is `OK`, meaning permitted.
-The same applies to `serving`, where a readiness probe reads `SERVING` off a
-response that carried no such field.
+**A field absent from the wire decodes as zero, and §3.4 is what makes that
+safe.** §5 has an `ERROR` message carry no field but `status` and
+`error_detail`, so a `result` decoded from one was never sent. Its zero value is
+not `OK`: §3.4 leaves 0 unassigned in every enumeration, so a receiver treats it
+as `AUTHN_UNKNOWN` and MUST NOT read it as affirmative. The same holds for
+`serving`, where a probe reading a response that carried no such field gets
+`SERVING_UNKNOWN` rather than `SERVING`.
 
-§3 makes establishing `msg_type` before reading any field a MUST for a client,
+Do not rely on that alone. It closes the enumerations, and the shared-struct
+hazard below reaches fields it does not cover.
+
+§6 makes establishing `msg_type` before reading any field a MUST for a client,
 and it is what keeps this shut. Dispatch on it into a per-type struct rather
 than filling one shared struct and branching afterwards. A shared struct is what
 makes the hazard reachable, because the field exists in it whether or not the
@@ -527,19 +546,20 @@ message carried one.
 
 §6.4 numbers the response fields so that no tag names two different fields, and
 a decode-then-dispatch client is what that numbering protects. Such a client
-reading an `ERROR` message as an `AUTHENTICATE_RESPONSE` finds `0x8101`, which
-is not a tag `AUTHENTICATE_RESPONSE` defines, so it skips an optional field and
-comes out with no `result` at all. §6.2 then denies for want of one.
+reading an `ERROR` message as an `AUTHENTICATE_RESPONSE` finds `0x0181`, which
+is not a tag `AUTHENTICATE_RESPONSE` defines. Its required bit is set, so §3.3
+has the client abort rather than skip, and it reports the response as malformed
+(§7). The numbering protects by forcing a rejection, not by leaving a field
+out.
 
 Had `status` and `result` shared a tag, the same client would have read a
-protocol rejection as a decision, and value 0 is where that bites: §5 leaves 0
-unassigned in `status`, so §3.4 requires a receiver to treat it as
-`STATUS_UNKNOWN`,
-while read as a `result` it is `OK`. Unlike the absent-field hazard above, that
-survives a decoder which correctly requires the field to be present.
+protocol rejection as a decision. Every value that names a status now names a
+different outcome as a result, and both enumerations leave 0 unassigned, so the
+confusion misreports rather than granting. Unlike the absent-field hazard above,
+it survives a decoder which correctly requires the field to be present.
 
-None of which licenses skipping the `msg_type` check. §3 makes it a MUST, the
-numbering is a second line rather than the first, and `0x4302` is still
+None of which licenses skipping the `msg_type` check. §6 makes it a MUST, the
+numbering is a second line rather than the first, and `0x0443` is still
 `server_desc` in two response groups, so a client that dispatches on tag alone
 can still take a PING's release string for a STATUS one.
 
@@ -602,8 +622,8 @@ characters, so a 256-octet `user` of control characters renders to 1026 against
 `error_detail`'s maximum of 512. §5 binds the server to fit, so render into a
 budget rather than formatting and hoping: shorten the embedded text, keep the
 prose that names the bound, and never let the result exceed the maximum. A
-server that overruns emits a message its client treats as having no
-`error_detail` at all (§3.1). The consequence of getting it wrong lands on the
+server that overruns emits a message a client using `error_detail` reports as
+malformed (§5, §7). The consequence of getting it wrong lands on the
 *client*: a PAM module writes `error_detail` to `pam_syslog` on the strength of
 §5's guarantee, so a newline the server passed through is a log-forging
 primitive in the host's authentication log.
@@ -614,8 +634,8 @@ diagnostic, so it reaches a log by the same route.
 **On the receiving side, check at the point of use and check code points.** §5
 requires a receiver to establish that one of these values is valid UTF-8 and
 free of control characters before it logs it, returns it, or acts on it, and to
-treat a value that fails as absent. A receiver that ignores the field does
-nothing, so a PAM module pays nothing on the success path.
+report the response as malformed where it fails. A receiver that ignores the
+field does nothing, so a PAM module pays nothing on the success path.
 
 The check is one forward pass, allocating nothing, and the control-character
 test comes out of the same pass that validates the encoding. Do not scan octets
@@ -723,6 +743,12 @@ deployment rather than at run time: a client in that position which meets a
 server that omits `authn_id` can only fail, and failing every authentication for
 a configuration mismatch is worth catching before it is load-bearing.
 
+That check is worth only as much as the server's consistency, which is why §6.2
+asks a server answering from a cache or from a mechanically derived result to
+carry the same fields as the live path. A server that populates `authn_id` from
+its upstream and omits it on a cache hit passes the check and fails later, on
+the path the check never took.
+
 `pam_ludsa` always sends `user`, because PAM always has one: it is the account
 being authenticated, and there is no version of the module's job that does not
 involve it. The optional path in §6.2 is for a client that holds a
@@ -742,10 +768,11 @@ returns 0 for unequal lengths and the length is not the secret. It is a
 reference server rather than a production one, which is the reason to get it
 right: it is what someone reads before writing their own.
 
-**A uniform denial code is not uniform behaviour.** §6.2 has a server unwilling
-to disclose answer `AUTHN_DENIED` for every denial, and a server that does that
-while returning in a microsecond for an unknown user and thirty milliseconds for
-a policy lookup has disclosed the same thing the code was withholding. A
+**A uniform denial code is not uniform behaviour.** §6.2 offers a server that
+will not disclose the option of answering `AUTHN_DENIED` for every denial, and a
+server that takes it while returning in a microsecond for an unknown user and
+thirty milliseconds for a policy lookup has disclosed the same thing the code
+was withholding. A
 production server may want to equalise the two, by deferring the answer to a
 fixed floor or by doing the work either way.
 
@@ -764,8 +791,10 @@ status to report it with.
 **Where the check goes is now a choice rather than a constraint.** At accept, a
 server has nothing to answer in and closes without replying, which costs it the
 diagnosis and leaks nothing. After reading `ludsa_version_major` it can answer
-`PEERCRED_DENIED`, which reaches the client's logs and Appendix B maps to
-`PAM_SYSTEM_ERR`, sending an operator to the allowlist. Before the status
+`PEERCRED_DENIED`, which reaches the client's logs and points an operator at the
+allowlist. Appendix B maps it to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong
+socket mode draws, so the stack falls through and the log carries the
+diagnosis. Before the status
 existed the first was the only conforming option, because §2 obliges a server to
 answer once it holds a version and §5 had nothing that fit.
 
