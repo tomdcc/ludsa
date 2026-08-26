@@ -129,6 +129,19 @@ differently. A mode tighter than `0660` stops clients connecting, which a
 deployment discovers immediately. A mode looser than it is the one nothing
 surfaces.
 
+The seventh round raised the permitted narrowing as a finding, which is the
+argument for §2 saying it rather than leaving it here. The reasoning had been
+settled for rounds and a reviewer still read the upper bound as an oversight,
+because nothing in the normative text distinguished a bound chosen from a bound
+that had not been finished. A rule stated as a bound should say it is one.
+
+Requiring `0660` exactly was the alternative and would have been the same rule
+twice over. The upper bound already forbids every extra bit, so a lower bound
+saying the group can connect leaves owner and group at `rw` and everything else
+clear, which is `0660` and nothing else. There is no middle setting to choose,
+only the freedom to tighten, and tightening is what a deployment whose client
+and server share a uid does on purpose.
+
 **Why a server must fail to start rather than widen the mode.** The tempting
 fallback for a server that cannot set the group is to open the mode until things
 work. That trades a startup failure nobody can miss for a socket anyone on the

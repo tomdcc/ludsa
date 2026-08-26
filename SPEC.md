@@ -171,6 +171,13 @@ with a group other than the one configured for it. A server MUST NOT publish
 that path until both are correct, and MUST fail to start if it cannot make them
 correct.
 
+That is a bound and not a value. A mode narrower than `0660` conforms, including
+one that leaves no client able to connect, and this document does not require a
+server to check that anyone can reach the socket it published. The two
+directions fail differently: too narrow stops every client at once and a
+deployment finds it on its first authentication, where too wide surfaces
+nowhere and admits whoever the extra bits admit.
+
 **The socket's group MUST be configured.** There is no default. A server with
 none configured MUST fail to start, and MUST NOT fall back to its own primary
 group.

@@ -353,6 +353,14 @@ directory, at the cost of the server needing to be in the target group or hold
 Verify either on the target platform before relying on it. Umask behaviour on
 socket inodes is not uniform.
 
+**Set the umask; do not inherit one.** §2 bounds the mode from above only, so a
+socket that comes out `0600` under an inherited `0077` conforms, and the server
+starts, publishes and serves nobody. Nothing on the server side reports it. What
+reports it is every client, at once, with `EACCES` and `CONNECTION_FAILED`, so
+the fault is loud in the wrong log. A server that sets the umask itself before
+`bind()` cannot inherit the problem, and one taking the second route sets the
+mode outright and is unaffected.
+
 Measured on Linux on 2026-08-23, Debian 12 on kernel 7.0.12: with umask `0117`
 under a `02770` directory, a bound socket comes out `0660` with the directory's
 group and no setgid bit. `S_ISGID` propagates to newly created subdirectories,
