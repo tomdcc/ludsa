@@ -933,9 +933,31 @@ ordering arrival strictly first would make it defer every verdict to the end of
 the message. §3 is built the other way: its drain protocol exists for nothing
 but rejecting before the message has arrived, it requires the response to be
 written before the drain begins, and a client's fixed receive buffer depends on
-the same freedom. So a message both truncated and faulty in the octets that
-arrived takes either status, and §7 excludes it as a case rather than choosing
-one, on the same footing as a request that stalls before its version word.
+the same freedom.
+
+**Which left one case with two answers, and the seventh round closed it.** A
+message both truncated and faulty in the octets that arrived used to take either
+status, and §7 excluded it as a case rather than choosing one, on the same
+footing as a request that stalls before its version word. The two are not on the
+same footing. A request that stalls before its version word leaves a server with
+nothing to answer in, so both outcomes are forced by what it holds. This one is
+not forced by anything: whether the receiver has scanned as far as the fault
+when the message ends is a question about how a socket read happened to split,
+so the same implementation answers `REQUEST_MALFORMED` on one run and
+`REQUEST_INCOMPLETE` on the next.
+
+That would be tolerable if the two statuses meant the same thing downstream.
+They do not, deliberately. `REQUEST_MALFORMED` sends an operator to file a bug
+and `REQUEST_INCOMPLETE` sends them to the deployment, and Appendix B keys a
+PAM code on the difference, so one stack falls through where the other
+hard-fails on identical octets.
+
+So a detected fault outranks the truncation. Early rejection is untouched, since
+a receiver that finds a fault still reports it without waiting. What the rule
+adds falls on a receiver that buffers: when the message ends short it examines
+what it holds before answering, which is running the parser it already has over
+a shorter buffer. The status becomes a property of the octets rather than of the
+read pattern, and §7 gains a case where it used to have an exclusion.
 
 The fifth round paired arrival with framing alone, which left the message type
 as the one place a receiver holds a settled verdict and may not report it. A
