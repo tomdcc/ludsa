@@ -1158,12 +1158,25 @@ lost.
 The disclosure is smaller than the one §6.2 guards against. A uid is not freely
 chosen. An attacker must already be running as one to try it, where a user name
 can be guessed without limit, so the enumeration that makes
-`AUTHN_DENIED_USER_UNKNOWN` optional has little purchase here. A server that
-still wants to say nothing closes without replying, which stays available.
+`AUTHN_DENIED_USER_UNKNOWN` optional has little purchase here.
 
-It also needs no new machinery. The check completes before a message arrives, so
-a server that answers has no version from the client, and §2's rule for
-answering without one already covers it.
+**Why the section says nothing about when the check happens.** It used to say
+the check completes before a message arrives, so a server that answers has no
+version from the client and §2's rule for answering without one covers it. That
+was an assertion about implementations rather than a rule, and it was not true
+of the deployment `IMPLEMENTATION.md` recommends: a server that checks after
+reading `ludsa_version_major` is the only one whose refusal reaches the client's
+log at all. Beside it sat an unconditional permission to close without replying,
+which §2 forbids from the moment the version word is read.
+
+So the timing is a server's choice and §2 already governs what follows from it.
+Read a version and you owe an answer, for this refusal as for every other.
+Refuse before reading one and closing in silence stays open. That makes where
+the check goes the same decision as how discreet to be, which is a better place
+for it than a sentence in §5 asserting where implementations put it.
+
+A server that wants to say nothing therefore checks early. Nothing is lost: the
+peer learns only that the connection closed, which is what it learned before.
 
 The name puts the subject first, where the result codes in §6.2.1 put the verb
 first. That is deliberate. `PEERCRED_DENIED` is a status in §5 and refuses a

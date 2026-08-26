@@ -861,15 +861,20 @@ Nothing binds a server. Filesystem permissions are the access control the
 protocol relies on. A server that checks anyway is worth the trouble in most
 deployments, and §5 gives it a status to report the refusal with.
 
-**Where the check goes is now a choice rather than a constraint.** At accept, a
-server has nothing to answer in and closes without replying, which costs it the
-diagnosis and leaks nothing. After reading `ludsa_version_major` it can answer
-`PEERCRED_DENIED`, which reaches the client's logs and points an operator at the
-allowlist. Appendix B maps it to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong
-socket mode draws, so the stack falls through and the log carries the
-diagnosis. Before the status
-existed the first was the only conforming option, because §2 obliges a server to
-answer once it holds a version and §5 had nothing that fit.
+**Where the check goes is now a choice rather than a constraint, and it decides
+what the server owes.** At accept, a server has nothing to answer in and closes
+without replying, which costs it the diagnosis and leaks nothing. After reading
+`ludsa_version_major` it MUST answer, and `PEERCRED_DENIED` is what it answers
+with: that reaches the client's logs and points an operator at the allowlist.
+Appendix B maps it to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode
+draws, so the stack falls through and the log carries the diagnosis. Before the
+status existed the first was the only conforming option, because §2 obliges a
+server to answer once it holds a version and §5 had nothing that fit.
+
+**Reading the version word and then closing in silence is not conforming.** It
+is the shape a peercred check acquires by accident: read the envelope, decide
+the peer is not allowed, return early. §2 permits a silent close only where
+writing failed, and a client cannot tell that close from a crashed server.
 
 A server can read `SO_PEERCRED` and refuse a connection whose peer uid is not in
 a configured allowlist, subject to these constraints:

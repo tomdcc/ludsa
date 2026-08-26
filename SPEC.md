@@ -681,15 +681,21 @@ whole of its value. A field above its §3.1 maximum is not `REQUEST_TOO_LARGE`,
 because a receiver finds one only inside a body it has already accepted.
 
 `PEERCRED_DENIED` is for a server that checks the connecting peer, which this
-document does not require. Such a server MAY answer it and MAY instead close
-without replying. The check happens before a message arrives, so a server that
-answers has no version from the client and follows §2: it waits a bounded
-interval for one, or answers in its own major version.
+document does not require. This document does not say when the check happens
+either: a server MAY make it at accept, after reading `ludsa_version_major`, or
+after reading the whole request. What that choice settles is whether the server
+still owes an answer, and §2 settles it rather than this section.
+
+Where the server has read `ludsa_version_major`, §2 binds it: it MUST answer,
+and `PEERCRED_DENIED` is the status for this refusal. Where it has not, §2 lets
+it close without replying, or answer in its own major version after allowing the
+client a bounded interval to supply one.
 
 It discloses that the peer was refused and why. That is a smaller disclosure
 than it looks, because a uid is not freely chosen: an attacker must already be
 running as one to try it, where a user name can be guessed without limit. A
-server unwilling to disclose even that closes without replying.
+server unwilling to disclose even that makes the check before it reads a
+version, which is the point at which saying nothing is still open to it.
 
 `REQUEST_TIMEOUT` describes the arrival of the request, not the time spent
 reaching a verdict. A server that bounds a dependency call reports `UNAVAILABLE`
