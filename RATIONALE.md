@@ -608,6 +608,32 @@ The rule binds a sender to its own version rather than to 1.0, which is what
 lets a later version emit at all, and §5's `ERROR` sentence became an instance
 of it rather than the only statement of it.
 
+**Why a receiver enforces none of it.** The author asked, on the day the rule
+went in, whether a receiver that knows the sending version should reject a tag
+that version does not define. It should not, and §4 now says so, because the
+question is one any reader of the new bullet will reach.
+
+A receiver could apply such a check only against a version it already
+implements, so it would police older peers and leave newer ones alone, which is
+the wrong way round: the newer implementation is the one more likely to be right
+about what it is doing. The check buys nothing at the time either, since the tag
+is skipped whether or not it is legal, and it costs a great deal when a peer has
+a small encoder fault, because every authentication then fails rather than
+succeeding with a skipped tag.
+
+It would also make `ludsa_version_minor` load-bearing for parsing, which §4
+refuses everywhere else: the value is for logs, it must not inform a decision,
+and there is no negotiation for it to be half of. A protocol whose parse depends
+on a field a peer might get wrong has made a log annotation into a schema
+selector.
+
+The same answer settles the other direction, which is the sharper one. A peer
+implementing a later version may receive a message declaring an earlier one that
+carries a tag the later version defines. It recognises that tag, so §3.3 has it
+read the field, from a sender whose declared version should not have sent it.
+Parsing by tag rather than by declared version answers both without a second
+rule.
+
 **Why absence and emptiness are different.** An earlier wording told an emitter
 never to send a field empty, which conflated *I have no value for this* with *my
 value is zero octets*. The first is an absent optional field, which is omitted.

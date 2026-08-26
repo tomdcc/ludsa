@@ -353,6 +353,10 @@ no version defines. A receiver skips one, so nothing breaks today; what breaks
 is later, when a minor version assigns that tag and a peer implementing it reads
 the padding as the field.
 
+It is a sender's rule alone. §4 has a receiver parse by tag rather than by the
+version a message declares, so a receiver neither checks this nor may reject
+for it.
+
 A value of zero octets is a value, not an absent field. Whether one is
 acceptable is a decision for the receiving application, not for this protocol.
 
@@ -520,6 +524,15 @@ needs it.
 whose `ludsa_version_minor` differs from its own, in either direction, and MUST
 parse it under the rules of §3.3. A higher minor version can only add fields
 that are safe to skip.
+
+**A receiver parses by tag and not by the declared version.** It skips a tag it
+does not recognise and reads one it does, whatever version the message declares,
+and MUST NOT reject a message because the version it declares does not define a
+tag it carries. §3.2's rule against emitting such a tag binds a sender and gives
+a receiver nothing to enforce. A receiver could enforce it only against a
+version it already implements, which is to say against older peers and not newer
+ones, and it would turn a tag that is skipped today into a failed
+authentication.
 
 The minor version is for logs, and a server MAY tailor what it sends to the one
 a request declares (§3). It MUST NOT inform an authentication decision, and it
@@ -1332,7 +1345,9 @@ prohibition: a client MUST NOT report a `REQUEST_` code for any of them.
 
 A receiver MUST accept a message whose `ludsa_version_minor` differs from its
 own, in either direction, and MUST skip an unrecognised **optional** tag without
-error, including one that appears more than once. It MUST accept a message whose
+error, including one that appears more than once. It MUST do both whatever
+version the message declares, including one it implements, since §4 has it parse
+by tag rather than by that value. It MUST accept a message whose
 declared length is exactly the minimum for the version, which a `PING_REQUEST`
 carrying no fields is, and a field whose value is exactly its §3.1 maximum. It
 MUST report an enumerated value it does not recognise as that enumeration's 1
