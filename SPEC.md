@@ -1491,8 +1491,12 @@ client reads the result out of it.
 These are defaults, not requirements. A client MAY let a deployment override the
 code it returns for an outcome, and one that does SHOULD keep these as its
 defaults, so two clients behave alike where nobody has configured otherwise. A
-client MUST NOT let an override map a `result` other than `OK` onto success, or
-turn any failure into one.
+client MUST NOT let an override admit a caller on a `result` other than `OK`, or
+turn any failure into an admission. The test is what the stack does, not what
+one entry point returns: the `PAM_SUCCESS` this appendix gives
+`AUTHN_DENIED_POLICY` at `pam_sm_authenticate` admits nobody by itself, because
+the same outcome denies at `pam_sm_acct_mgmt` and the rule below binds a client
+that relies on it.
 
 `CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
 ends, a client and a server that a configuration does not permit to talk. A
@@ -1521,15 +1525,26 @@ unreachable LUDSA server without new configuration.
 
 Auth result (§6.2.1):
 
-| result | PAM code |
-|---|---|
-| `OK` | `PAM_SUCCESS` |
-| `AUTHN_UNKNOWN` | `PAM_AUTHINFO_UNAVAIL` |
-| `AUTHN_DENIED_CREDENTIAL` | `PAM_AUTH_ERR` |
-| `AUTHN_DENIED_POLICY` | `PAM_PERM_DENIED` |
-| `AUTHN_DENIED_USER_UNKNOWN` | `PAM_USER_UNKNOWN` |
-| `AUTHN_DENIED` | `PAM_AUTH_ERR` |
-| `SERVICE_UNSUPPORTED` | `PAM_SYSTEM_ERR` |
+| result | from `pam_sm_authenticate` | from `pam_sm_acct_mgmt` |
+|---|---|---|
+| `OK` | `PAM_SUCCESS` | `PAM_SUCCESS` |
+| `AUTHN_UNKNOWN` | `PAM_AUTHINFO_UNAVAIL` | `PAM_AUTHINFO_UNAVAIL` |
+| `AUTHN_DENIED_CREDENTIAL` | `PAM_AUTH_ERR` | `PAM_AUTH_ERR` |
+| `AUTHN_DENIED_POLICY` | **`PAM_SUCCESS`** | `PAM_PERM_DENIED` |
+| `AUTHN_DENIED_USER_UNKNOWN` | `PAM_USER_UNKNOWN` | `PAM_USER_UNKNOWN` |
+| `AUTHN_DENIED` | `PAM_AUTH_ERR` | `PAM_AUTH_ERR` |
+| `SERVICE_UNSUPPORTED` | `PAM_SYSTEM_ERR` | `PAM_SYSTEM_ERR` |
+
+Both columns come from one rule. `pam_sm_acct_mgmt` returns `PAM_SUCCESS` for
+`OK` and the outcome's own code otherwise. `pam_sm_authenticate` does the same,
+except that an authorisation outcome passed the credential step, so it returns
+`PAM_SUCCESS` and leaves the denial to the `account` phase. A credential outcome
+usually stops the stack before `pam_sm_acct_mgmt` runs at all; its column is
+what a control flag that does not stop the stack reaches, and it fails there
+too.
+
+The emphasised cell is the appendix's one fail-open hazard, and the paragraphs
+below are about it.
 
 `AUTHN_DENIED` maps to `PAM_AUTH_ERR` because a client told nothing may not
 conclude the credential was good, and `PAM_AUTH_ERR` is the outcome that assumes
@@ -1542,9 +1557,10 @@ it, so denying the user reports the wrong party at fault, and every login
 afterwards fails the same way with nothing pointing at the line that caused it.
 It is the one `result` that needs a person rather than a different credential.
 
-A credential outcome fails `pam_sm_authenticate`. An authorisation outcome,
-which in version 1.0 means `AUTHN_DENIED_POLICY` alone, returns `PAM_SUCCESS`
-from `pam_sm_authenticate` and its own code from `pam_sm_acct_mgmt`.
+The split the table shows follows §6.2.1's two decisions. A credential outcome
+fails the credential step, so it fails `pam_sm_authenticate`. An authorisation
+outcome, which in version 1.0 means `AUTHN_DENIED_POLICY` alone, passes that
+step and fails the other.
 
 **That split is where a stack fails open.** A client that returns `PAM_SUCCESS`
 from `pam_sm_authenticate` for an authorisation outcome MUST document that its
