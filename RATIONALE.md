@@ -1375,7 +1375,23 @@ all of its own tests. Only the conformance matrix catches it.
 
 The whitespace-detection SHOULD exists because rejecting is correct, but
 reporting "signature verification failed" when the cause was a stray newline is
-not.
+not. The report goes to the server's own log, because there is nowhere else for
+it to go. `error_detail` lives only in `ERROR`, and a credential that fails
+validation is a decision, so what the client receives is an
+`AUTHENTICATE_RESPONSE` carrying `result` and `authn_id`. Rerouting to `ERROR`
+is not open either: `credential` is `bytes`, whose row in §3.3 carries no
+constraints, and §3.3 forbids imposing any beyond a field's own.
+
+**Why `error_detail` was not given a tag in `AUTHENTICATE_RESPONSE`.** It would
+make the diagnosis wire-visible, and so testable, which is the one thing a
+server's private log cannot offer. Against that it takes the largest response
+from 534 octets to 1045, doubling the fixed receive buffer a client needs for
+every version it will ever meet. It puts free-form text on the denial path,
+where §6.2 asks a server to be able to answer discreetly and the disclosure
+rules are written against an enumeration rather than against prose. And it adds
+a second optional field to that message whose presence varies with the
+deployment, which is the property that already leaves `authn_id` unverifiable
+from one exchange.
 
 **Why `pid` is logging-only.** It lets a server's log join to a PostgreSQL log
 carrying `%p`. Forging it requires access that already permits forging the whole

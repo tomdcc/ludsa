@@ -705,8 +705,7 @@ distinction.
 MUST NOT return it to the remote party, and MUST NOT pass it to its host
 application by any route that reaches the remote party. It MUST NOT contain any
 part of a `credential`. A server describing a defect in one describes the
-condition and not the octets: "trailing whitespace", or "exceeds 16384
-octets".
+condition and not the octets: "exceeds 16384 octets".
 
 It MUST NOT contain a control character, meaning U+0000 to U+001F, U+007F, and
 U+0080 to U+009F, so that a receiver may write it as a datum to a line-oriented
@@ -902,8 +901,9 @@ default policy.
 `credential` is carried **verbatim, as raw bytes with an explicit length**, and
 is never re-encoded. **The client and the server MUST NOT normalise it.** No
 trimming, no stripping of a trailing newline, no case folding. A server SHOULD
-still detect leading or trailing whitespace and name the condition, not the
-value, in `error_detail` (§5).
+still detect leading or trailing whitespace and record the condition, not the
+value, in its own log. A credential that fails validation is a decision
+(§6.2.1), and a decision carries no field for a diagnosis.
 
 `pid` is for log correlation only. The client self-reports it, and it MUST NOT
 inform any decision.

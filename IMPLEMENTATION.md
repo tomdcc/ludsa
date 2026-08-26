@@ -616,7 +616,10 @@ tests cannot reach.
 
 §6.2's SHOULD about detecting leading or trailing whitespace is the diagnostic,
 not the fix. The two are easy to conflate: a server that reports the condition
-and then trims has satisfied the SHOULD and broken the MUST.
+and then trims has satisfied the SHOULD and broken the MUST. The report goes to
+the server's own log, and `error_detail` is not the place to reach for: a
+credential that fails validation is a decision, so the client receives an
+`AUTHENTICATE_RESPONSE`, which has no field to carry it.
 
 ## Populating `error_detail`
 
