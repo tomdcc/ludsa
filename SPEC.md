@@ -150,8 +150,8 @@ sent.
 
 **A client may be configured with the server identity it expects**, as a user
 name or a uid. Where it is, the client MUST confirm the peer's identity before
-it writes. It MUST close the connection and report `CONNECTION_FAILED` (§7)
-where it cannot, without issuing a request.
+it writes. It MUST close the connection where it cannot, without issuing a
+request, and report the condition §7 names `CONNECTION_FAILED`.
 
 Not confirming covers two cases: a peer that is someone else, and a peer the
 client could not identify. A deployment that asks for a check its platform
@@ -313,8 +313,8 @@ A receiver MUST reject a field above its maximum, except that §5 governs a
 client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
 `REQUEST_TOO_LARGE`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
-asked to send one reports `INVALID_REQUEST` (§7) to its host application,
-without opening a connection.
+asked to send one reports the condition §7 names `INVALID_REQUEST` to its host
+application, without opening a connection.
 
 `error_detail`, `server_desc` and `authn_id` are the only fields in this table
 that a server sends and a client receives. A defect in any field a server sends
@@ -1093,18 +1093,24 @@ becomes retired and is never reassigned (§4.1).
 
 ## 7. Conformance
 
-A receiver MUST reject each of the following with the status shown. *Against*
+A receiver MUST reject each of the following. A server rejects by sending the
+status shown. A client has nothing to send, so it rejects by reporting to its
+caller, and the condition binds it rather than the name: the names below are the
+ones it SHOULD use, and a driver is told the ones it does use (F7). *Against*
 names the side a case can be constructed for: every version 1 `string` field is
 a request field, and a request has no `msg_type` a response permits, so some
 cases exist in one direction only. Case 21 is marked `server` on other grounds.
 It can be constructed against a client, but §5 makes a client's outcome there a
 SHOULD, so the table of SHOULD-report cases below carries that direction.
-*Needs* names a fixture this document does not define.
+*Needs* names a fixture this document does not define. F7 is a precondition of
+every case driven against a client rather than of any one case, so the column
+does not repeat it.
 
 Every case driven against a server is answerable, because each carries at least
 a version word and a server can answer in its own major version (§2). A case
-driven against a client has nothing to answer, so the client reports the
-response name §7 pairs with the status shown.
+driven against a client has nothing to answer, so it reports to its caller
+instead. Where a case is marked `either`, the status shown is the server's and
+the client's counterpart is the name paired with the same condition below.
 
 | # | case | against | status | needs |
 |---|---|---|---|---|
@@ -1175,6 +1181,11 @@ document does not specify. A driver MUST be given all of them:
   accept-to-complete-request deadline to know how long to stall, and the
   client's overall deadline to know how long to hold a connection open and how
   long to wait. Neither has a value this document sets.
+- **F7**: the names the client under test reports, mapped onto the client-local
+  names below, and the channel a driver reads them on. Every case driven against
+  a client needs it, including one marked `either`. None of those names crosses
+  the socket and a client using its own is conforming, so a driver can infer
+  neither the names nor the channel from anything the wire carries.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1292,7 +1303,9 @@ to describe.
 
 The table above binds a client by its conditions, not by these names. Where it
 gives a status for a case marked `either`, a client detects the same condition
-and reports the response name beside it here.
+and reports the response name beside it here. Where a case is marked `client`,
+the status column already holds one of these names, and the same latitude
+applies to it.
 
 A code that carries no direction serves both sides. A client reports
 `VERSION_UNSUPPORTED` for a response major version it does not implement, and

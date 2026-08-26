@@ -1590,6 +1590,22 @@ out that the conditional MUST had been chosen over a bare SHOULD precisely
 because it is observable, and that nothing in §7 observed it. The rule was sound
 and its justification was not delivered.
 
+**Why a client's names are not normative, and why that costs a fixture.** The
+names a client reports never cross the socket, so no peer can depend on them and
+a MUST would bind something no other implementation can observe. A host wants
+its own vocabulary as well: a PAM client returns a PAM code, and one wanting a
+distinct code per condition subdivides. So the names are a SHOULD and the
+conditions are what bind.
+
+The price is that a driver cannot read the outcome of a client-direction case
+from anything the wire carries. §7 asserted those outcomes for several rounds
+with nothing supplying either the client's own names or the channel they arrive
+on, which made the client half of the suite rest on a premise the document never
+stated. F7 is that premise written down. It is a precondition of a direction
+rather than of a case, which is why the *needs* column does not carry it: doing
+so would mean marking every row that can be driven against a client, and a later
+case added in one direction would silently be marked wrong.
+
 **Why the client's line sits at one octet and the server's at two.** The two
 thresholds answer different questions. A server needs `ludsa_version_major`
 before it knows which version to answer in, so a truncated word leaves it
