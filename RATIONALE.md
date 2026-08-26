@@ -1380,20 +1380,34 @@ does not need the server to tell it what it says. One that cannot, or that would
 rather not depend on its own reading agreeing with the server's, asks for a
 server that supplies it.
 
-**Why the cached and derived paths carry a SHOULD.** Both reviewers in the fifth
-round found the same hole: presence is a property of a response, not of a
+**Why consistency within a `service` carries a SHOULD.** Both reviewers in the
+fifth round found the same hole: presence is a property of a response, not of a
 server, so the arrangement above cannot be checked. A deployment tries one
 credential, sees `authn_id`, and generalises, and a server that fills the field
 from its upstream and omits it on a cache hit is conforming. The failure is
 fail-closed but intermittent, and it presents as a server fault.
 
-The rule names the mechanism rather than demanding consistency outright. Both
-reviewers proposed the latter, one globally and one per `service`, and either
-forbids more than the hole needs. What actually varies is the degraded path: a
-cache that stored a verdict without an identity, or a validation done from
-material the server already holds. Asking those to match the live path closes it
-and leaves a server free to route two services to backends that genuinely
-differ.
+**The rule named a mechanism for two rounds, and the mechanism was not the
+property.** It asked the cached and derived paths to match the live one, on the
+reasoning that the degraded path is what actually varies and that naming it
+leaves a server free to route two services to backends that genuinely differ.
+The seventh round showed that reasoning does not hold up. It was offered against
+blanket consistency, but one of the two proposals it rejected was consistency
+*within* a `service`, which leaves the routing freedom untouched by
+construction. So the justification distinguished the shipped rule from one
+proposal and not from the other.
+
+By then a second route had opened as well. §3 gained a permission for a server
+to tailor a response to the request's `ludsa_version_minor`, which is a further
+way for the same response to vary and one a deployment check run at a single
+minor version cannot see.
+
+Two routes covered by one sentence and a third by none is the shape of a rule
+written at the wrong altitude. The SHOULD now states the property: within one
+`service`, the same optional fields, whatever path and whatever declared minor
+version. The cross-`service` freedom is stated rather than implied, and §3's
+tailoring is bounded to substitution so it cannot drop a field at all. A fourth
+route needs no fourth sentence.
 
 **Why `service` is safe to route on.** It derives from the `pamservice=` option
 on the matched `pg_hba.conf` line, which the remote party cannot influence. This

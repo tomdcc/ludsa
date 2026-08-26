@@ -291,11 +291,14 @@ Where a server cannot match the client's major version, because it does not
 implement the one it was sent or because it read none, it answers in any major
 version it implements.
 
-A server MAY tailor a response to the request's `ludsa_version_minor`. A later
-version that adds an optional diagnostic field may, for a client that predates
-it, carry the same information in a field that client understands. The value
-MUST NOT inform an authentication decision (§4), and an older client skips what
-it does not recognise in any case.
+A server MAY tailor a response to the request's `ludsa_version_minor`, by
+carrying information in a field the client understands instead of one it does
+not. A later version that adds an optional diagnostic field may do that for a
+client predating the field. The permission is to substitute and not to withhold:
+a server MUST NOT omit, on the strength of a declared minor version, information
+it would otherwise have carried. The value MUST NOT inform an authentication
+decision (§4), and an older client skips what it does not recognise in any
+case.
 
 ### 3.1 Field maxima
 
@@ -928,10 +931,17 @@ derive the identity from the credential therefore depends on being deployed
 against a server that supplies `authn_id`. That is an arrangement between a
 client and a deployment, not something the protocol settles.
 
-A server answering from a cache, or from a result it derived mechanically rather
-than by consulting a live service, SHOULD carry the same fields it would have
-carried on the live path. Varying them is what leaves that arrangement
-unverifiable, since a deployment sees one exchange and generalises from it.
+Within one `service`, a server SHOULD carry the same optional fields on every
+response it sends, whatever path it took to the answer and whatever
+`ludsa_version_minor` the request declared. Answering from a cache or from a
+result derived mechanically rather than by consulting a live service is the
+mechanism to watch, and it is not the only one. A deployment sees one exchange
+and generalises from it, so a field that appears on the path a check took and
+not on the path it did not is what leaves the arrangement above unverifiable.
+
+This says nothing across `service` values. Two of them may route to backends
+that genuinely differ, and a server that resolves an identity for one and not
+the other is answering honestly.
 
 `authn_id` MUST NOT contain a control character, on the terms §5 sets for
 `error_detail`.
