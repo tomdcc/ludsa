@@ -104,9 +104,11 @@ implementation and its configuration.
 
 When the server's request deadline expires it responds `REQUEST_TIMEOUT` (§5)
 and closes. Where the deadline expired before it read `ludsa_version_major`, it
-answers in its own major version or closes without replying, as above. When its
-response deadline expires it closes without replying, because the channel it
-would answer on is the one that is blocked.
+answers in its own major version or closes without replying, as above. Where it
+has already answered, having rejected the message early, it closes without
+replying and §3's drain is what the deadline was bounding. When its response
+deadline expires it closes without replying, because the channel it would answer
+on is the one that is blocked.
 
 A server MUST respond as soon as it determines it cannot reach a decision, with
 `UNAVAILABLE` or `INTERNAL_ERROR` as §5 requires. Whether it bounds the time it
@@ -263,15 +265,18 @@ earliest of these, and MUST then close:
 - it reaches end of file on the read direction;
 - it has read `2 x MAX_LENGTH` octets from the connection in total, counting the
   envelope and everything already read before it rejected;
-- the bound it sets on the drain expires. A server MUST set one.
+- §2's accept-to-complete-request deadline expires;
+- a shorter bound it set on the drain expires. A server MAY set one.
 
-The drain runs after the response is written, so neither deadline in §2 is
-running by then. The bound is the server's own and §2 does not name it, because
-its expiry has no consequence on the wire: the status was settled before the
-drain began.
+§2's deadline runs on through the drain, since the request it bounds never
+completed, and it is what guarantees the drain ends. Its expiry here means
+close, not answer: §2 has a server respond `REQUEST_TIMEOUT` where the deadline
+expires before it has answered, and on this path it has answered already. A
+server sends one response to a connection.
 
-The status it sends is the one it had determined when it rejected the message. A
-drain that ends at its bound does not change it to `REQUEST_TIMEOUT`.
+The status it sends is the one it had determined when it rejected the message.
+Neither §2's deadline nor a bound of its own, expiring during the drain, changes
+it to `REQUEST_TIMEOUT`.
 
 A server answering `VERSION_UNSUPPORTED` has read no length it may rely on, so
 the declared-length terminator does not apply to it and the rest do.
@@ -1249,9 +1254,10 @@ document does not specify. A driver MUST be given all of them:
   `user` of zero octets, which a deployment whose policy grants any `user`
   cannot supply. Such a peer cannot run the second decision case and is not
   non-conforming for that.
-- **F4**: the bound the peer sets on the drain (§3). A server whose bound is
-  shorter than the driver's round trip has stopped draining legitimately and
-  cannot be told from one that never drained.
+- **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
+  request deadline bounds the drain otherwise, and F6 supplies that. A server
+  whose bound is shorter than the driver's round trip has stopped draining
+  legitimately and cannot be told from one that never drained.
 - **F5**: the server identity the client under test is configured to expect, and
   a driver socket owned by a different uid. A client configured with none owes
   nothing under §2 and cannot run the case below.

@@ -232,6 +232,13 @@ no reset to discard it, which is a TCP behaviour and §2 forbids TCP.
 The status is the one determined when the message was rejected. A drain that
 runs to the deadline still answers `REQUEST_TOO_LARGE`, not `REQUEST_TIMEOUT`.
 
+**The deadline the drain runs under is §2's request deadline**, which is still
+running because the request never completed. A server need not set a second one,
+and MAY set a shorter one where it would rather not spend the remaining budget
+on a peer that already has its answer. What it MUST NOT do is answer again when
+the deadline expires mid-drain: the response has gone, and the expiry means
+close.
+
 ## Writing to the socket
 
 **Suppress `SIGPIPE` per write, and leave the host's disposition alone.**

@@ -438,6 +438,26 @@ read with no ceiling. A sender above twice this version's ceiling is cut off,
 and that is the compromise the constant states: generous enough for a later
 major version, bounded enough that nothing holds the connection open for ever.
 
+**Why §2's deadline bounds the drain in time.** §3 used to say the drain runs
+after the response is written, so neither deadline in §2 is running by then, and
+to require a server to set a bound of its own. Half of that was true. The
+response-write deadline has finished; the accept-to-complete-request deadline
+has not, because on this path the request never completes. So §2's deadline was
+running, and §2 says an expiry means answering `REQUEST_TIMEOUT`, which on a
+connection already answered is an instruction no server can carry out.
+
+Letting it run and saying what its expiry means is better than ending it. One
+number then bounds the whole connection from accept, rather than a server being
+held for a request deadline and a drain bound in succession, and the guarantee
+that the drain terminates comes from a deadline §2 already requires rather than
+from a knob §3 had to insist on. Its expiry during a drain means close: the
+status was settled when the message was rejected, and a server sends one
+response to a connection.
+
+A server's own drain bound survives as a MAY. It never carried the termination
+guarantee, and what it does carry is a server's freedom to stop draining early,
+which §7 concedes in F4 and cannot test for.
+
 **Why nothing is allocated from a wire value before it is checked.** Every
 length and count in a message is a number a peer chose. Sizing anything from one
 before bounding it against the structure that contains it is where a
