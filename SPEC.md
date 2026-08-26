@@ -637,7 +637,7 @@ the server decided, because an `ERROR` message means it decided nothing.
 | 3 | `REQUEST_MALFORMED` | the request was structurally wrong |
 | 4 | `REQUEST_INCOMPLETE` | the request ended before it was complete |
 | 5 | `REQUEST_TOO_LARGE` | the declared length exceeded `MAX_LENGTH` |
-| 6 | `REQUEST_UNSUPPORTED` | the message type, or a selector within it, is not implemented |
+| 6 | `REQUEST_UNSUPPORTED` | the message type is not implemented |
 | 7 | `VERSION_UNSUPPORTED` | `ludsa_version_major` is not implemented |
 | 8 | `REQUEST_TIMEOUT` | the request did not arrive within the server's deadline |
 | 9 | `UNAVAILABLE` | no verdict, and waiting may change that: a dependency that did not answer and may answer later |
@@ -900,7 +900,7 @@ its own does not discharge it.
 
 `service` states which policy applies. The remote party does not influence it,
 so a server MAY route on it. A server that does not recognise a `service` it was
-sent MUST respond `REQUEST_UNSUPPORTED` (§5), and MUST NOT fall back to a
+sent MUST answer `SERVICE_UNSUPPORTED` (§6.2.1), and MUST NOT fall back to a
 default policy.
 
 `credential` is carried **verbatim, as raw bytes with an explicit length**, and
@@ -938,9 +938,9 @@ unverifiable, since a deployment sees one exchange and generalises from it.
 
 #### 6.2.1 Auth result
 
-`result` states what the server decided. It appears only in an AUTHENTICATE
-response, which a server sends only when it reached a decision (§5). A denial is
-not a protocol failure: the server understood the request and answered it.
+`result` states what the server decided, or that the request's `service` named
+no policy it holds. It appears only in an AUTHENTICATE response. A denial is not
+a protocol failure: the server understood the request and answered it.
 
 | code | name | meaning |
 |---|---|---|
@@ -950,11 +950,24 @@ not a protocol failure: the server understood the request and answered it.
 | 4 | `AUTHN_DENIED_POLICY` | credential valid, but policy denies the identity, or denies it acting as `user` |
 | 5 | `AUTHN_DENIED_USER_UNKNOWN` | no mapping exists for the identity |
 | 6 | `AUTHN_DENIED` | the server declined, and does not say why |
+| 7 | `SERVICE_UNSUPPORTED` | the server holds no policy by the name `service` gave, and reached no decision |
 
 `AUTHN_DENIED` is always available and always sufficient. The codes that name a
 reason are ones a server MAY use where it is willing to disclose that much. A
 server that uses none of them is conforming, and so is one that uses some
 (§6.2).
+
+`SERVICE_UNSUPPORTED` is neither a denial nor a verdict, and the disclosure
+choice does not reach it: a server that recognises no such `service` MUST answer
+it. Nothing about the credential was examined and nothing about the remote party
+is disclosed, since `service` comes from the client's own configuration and the
+remote party does not influence it (§6.2). It sits here rather than among §5's
+statuses because those describe how a server handled a message, and this one
+handled it completely. What disagrees is the two deployments.
+
+A client MUST NOT grant anything on `SERVICE_UNSUPPORTED` and MUST NOT report it
+as an authentication outcome. It reports that the `service` it was configured to
+send is not one the server holds.
 
 Every code is available whether or not the request carried a `user`. With one,
 the reasons are about the requested `user`: whether it exists as far as this
@@ -963,15 +976,19 @@ no `user` to be unknown, so `AUTHN_DENIED_POLICY` is about the identity itself,
 which a server MAY examine and apply policy to on its own account, and
 `AUTHN_DENIED_USER_UNKNOWN` means the server resolved no identity at all.
 
-A server that could not reach a decision answers with an `ERROR` message
-carrying `UNAVAILABLE` or `INTERNAL_ERROR` (§5) instead, and carries no `result`
-at all.
+A server that could not reach a decision because it failed, or a dependency did,
+answers with an `ERROR` message carrying `UNAVAILABLE` or `INTERNAL_ERROR` (§5)
+instead, and carries no `result` at all. `SERVICE_UNSUPPORTED` is the one answer
+that reached no decision and is still an AUTHENTICATE response, because nothing
+failed.
 
-One code carries both decisions a client may need, because every code belongs to
-exactly one of them. `AUTHN_DENIED_POLICY` is an authorisation outcome: its
-meaning is that the credential was valid and policy denied it anyway. Every
-other non-`OK` code is a credential outcome, `AUTHN_DENIED` included, because a
-client told nothing MUST NOT conclude that the credential was good.
+One code carries both decisions a client may need, because every code that is a
+decision belongs to exactly one of them. `AUTHN_DENIED_POLICY` is an
+authorisation outcome: its meaning is that the credential was valid and policy
+denied it anyway. Every other non-`OK` code is a credential outcome,
+`AUTHN_DENIED` included, because a client told nothing MUST NOT conclude that
+the credential was good. `SERVICE_UNSUPPORTED` is not a decision, and a client
+fails both steps on it.
 
 Nothing here obliges a server to check a credential before it answers.
 `AUTHN_DENIED_USER_UNKNOWN` in particular does not imply that the credential was
@@ -983,7 +1000,7 @@ A client that sent a `user` and must answer at two separate points derives both
 from this one value. A credential outcome fails the credential step. An
 authorisation outcome passes the credential step and fails the authorisation
 step. A later version that adds a code MUST state which of the two decisions it
-belongs to.
+belongs to, or that it is not a decision, in which case both steps fail.
 
 A client that sent no `user` gets the credential step from this value and owes
 the authorisation step itself (§6.2).
@@ -1018,8 +1035,7 @@ It MUST NOT answer from data older than the client asked for.
 
 `service` selects which policy to describe. If it is absent, the server answers
 for itself as a whole rather than for any one policy. If it is present and the
-server does not recognise it, the server MUST respond `REQUEST_UNSUPPORTED`
-(§5).
+server does not recognise it, the server MUST answer `SERVICE_UNSUPPORTED`.
 
 Response:
 
@@ -1035,6 +1051,13 @@ Response:
 | 1 | `SERVING_UNKNOWN` | a value this implementation does not recognise |
 | 2 | `SERVING` | the server can authenticate a *new* principal right now |
 | 3 | `NOT_SERVING` | it cannot |
+| 4 | `SERVICE_UNSUPPORTED` | the server holds no policy by the name `service` gave |
+
+`SERVICE_UNSUPPORTED` is not a readiness signal, and it answers the selector
+rather than the question. A probe MUST NOT read it as an outage: no wait
+resolves it, because the name it sent is not one this server holds. It is the
+same condition §6.2.1 gives the same name, answered in the enumeration each
+response type carries.
 
 A server that has lost a dependency but still holds the material it needs to
 validate a new credential is serving. One validating against a previously
@@ -1135,7 +1158,6 @@ the client's counterpart is the name paired with the same condition below.
 | 14 | A missing required field for the message type | either | `REQUEST_MALFORMED` | |
 | 15 | The message ending before it is complete, after `ludsa_version_major` has been read | either | `REQUEST_INCOMPLETE` | |
 | 16 | A `msg_type` it does not accept, including a response type or `ERROR` | server | `REQUEST_UNSUPPORTED` | |
-| 17 | A `service` it does not recognise, in either request type | server | `REQUEST_UNSUPPORTED` | F1 |
 | 18 | A STATUS `max_age` it cannot satisfy under its own limit | server | `RATE_LIMITED` | F2 |
 | 19 | The request deadline expiring, after `ludsa_version_major` has been read | server | `REQUEST_TIMEOUT` | F6 |
 | 20 | A response carrying a `msg_type` the client implements, which the request does not permit (§6) | client | `RESPONSE_MALFORMED` | |
@@ -1148,6 +1170,11 @@ the client's counterpart is the name paired with the same condition below.
 | 27 | A declared length above `MAX_LENGTH`, in a message whose octets also carry a NUL | either | `REQUEST_TOO_LARGE` | |
 | 28 | The connection accepted and the request read, then closed with no response octet | client | `RESPONSE_ABSENT` | |
 | 29 | The connection accepted and the request read, then held open past the client's deadline | client | `RESPONSE_TIMEOUT` | F6 |
+
+Case 17 is retired. It drove an unrecognised `service`, which §6.2.1 and §6.3
+now answer with `SERVICE_UNSUPPORTED` rather than a rejection. Its number is not
+reused, on the ground §4.1 gives for a field number: a citation that outlives
+what it named should fail to resolve rather than resolve to something else.
 
 Every version 1.0 `utf8` field is one a client may reject for its content. §5
 makes a defect in `error_detail`, `server_desc` or `authn_id` a fault in the
@@ -1200,6 +1227,15 @@ can reach:
 |---|---|---|---|
 | A credential valid for one identity, sent with a `user` that identity may not act as | server | an `AUTHENTICATE_RESPONSE` whose `result` is not `OK` | F3 |
 | A credential the peer accepts, sent with a `user` of zero octets | server | an `AUTHENTICATE_RESPONSE` whose `result` is not `OK` | F3 |
+
+Further cases exercise the selector, which is neither a rejection nor a
+decision. Each drives the same condition into the enumeration its response type
+carries:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| An AUTHENTICATE request naming a `service` the server does not recognise | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
+| A STATUS request naming a `service` the server does not recognise | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
 
 One further case observes what a server does after it has answered, which no
 status can show. The driver writes an 8-octet envelope declaring a
@@ -1395,8 +1431,8 @@ file; one reading `PAM_AUTHINFO_UNAVAIL` waits, or falls through to another
 module.
 
 A status reaches a client only in an `ERROR` message (§5). A response carrying a
-message of the request's type is the successful case, and a client reads the
-result out of it.
+message of the request's type is the case where the server answered, and a
+client reads the result out of it.
 
 | status | PAM code |
 |---|---|
@@ -1453,11 +1489,18 @@ Auth result (§6.2.1):
 | `AUTHN_DENIED_POLICY` | `PAM_PERM_DENIED` |
 | `AUTHN_DENIED_USER_UNKNOWN` | `PAM_USER_UNKNOWN` |
 | `AUTHN_DENIED` | `PAM_AUTH_ERR` |
+| `SERVICE_UNSUPPORTED` | `PAM_SYSTEM_ERR` |
 
 `AUTHN_DENIED` maps to `PAM_AUTH_ERR` because a client told nothing may not
 conclude the credential was good, and `PAM_AUTH_ERR` is the outcome that assumes
 least. A server unwilling to disclose a reason therefore costs its clients the
 `auth`-versus-`account` distinction, which is the price of saying nothing.
+
+`SERVICE_UNSUPPORTED` maps to `PAM_SYSTEM_ERR` and not to an authentication
+failure. The `service` came from the stack's own configuration and no user chose
+it, so denying the user reports the wrong party at fault, and every login
+afterwards fails the same way with nothing pointing at the line that caused it.
+It is the one `result` that needs a person rather than a different credential.
 
 A credential outcome fails `pam_sm_authenticate`. An authorisation outcome,
 which in version 1.0 means `AUTHN_DENIED_POLICY` alone, returns `PAM_SUCCESS`

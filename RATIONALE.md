@@ -1071,13 +1071,47 @@ buy a name and no behaviour. The limits are far above any expected value, so a
 field over one is more likely a client bug than a legitimately large token, and
 a client that sent it ignored a rule it could have checked itself.
 
-**Why `REQUEST_UNSUPPORTED` covers an unrecognised `service`.** A client naming
-a service the server has never heard of is a configuration mismatch between the
-two, not a policy decision about a credential. `AUTHN_DENIED_POLICY` would
-additionally assert that the credential was valid, which the server never
-determined. The general line is that §5 says why no decision was reached and
-§6.2.1 says what the decision was, and a disagreement about what exists belongs
-to the first.
+**Why an unrecognised `service` has a name of its own.** It used to be
+`REQUEST_UNSUPPORTED`, on the line that §5 says why no decision was reached and
+§6.2.1 says what the decision was, so a disagreement about what exists belongs
+to the first. That line broke on inspection in the seventh round. §5's statuses
+describe how a server handled a message, and a server that recognises no such
+`service` handled the message perfectly: it parsed it, accepted it, and found
+that the name selects nothing it holds. What disagrees is two configurations,
+neither of them faulty.
+
+Folding it into the denials was the other candidate and is worse.
+`AUTHN_DENIED_POLICY` asserts the credential was valid, which the server never
+determined, so §6.2.1 forbids it outright. `AUTHN_DENIED` fits but says nothing,
+and a bare denial for a misconfigured `service=` reports the wrong party at
+fault. The user is denied for something no user chose, and every login
+afterwards fails identically with nothing naming the line responsible.
+
+So it is a status of the response rather than of the protocol, in whichever
+enumeration the response type carries: `result` at 7 for AUTHENTICATE, `serving`
+at 4 for STATUS. Appendix B maps it to `PAM_SYSTEM_ERR`, which is what keeps the
+operator signal the old `REQUEST_UNSUPPORTED` gave.
+
+**Why it is safe to name.** Every disclosure rule in §6.2 is about what a denial
+tells the remote party. This tells it nothing: `service` is the one field §6.2
+marks trusted, the remote party does not influence it, and the answer is about
+the deployment rather than about the credential or the identity. There is
+nothing to be discreet about, which is why the code is a MUST where the
+reason-naming denials are a MAY.
+
+**Why `SERVICE_` and not `AUTHN_`.** Every prefix answers the same question for
+a caller, which is where to look, and `AUTHN_*` answers nowhere, because it is
+a verdict. This one sends a caller to the `service` its own configuration told
+it to send, which no existing family covers. Subject first keeps it clear of the
+denials, the same reasoning that put `PEERCRED_DENIED` in that order.
+
+**Why `REQUEST_UNSUPPORTED` is better for losing it.** It covered a message type
+a server does not implement, which is a code fault, and a selector it does not
+recognise, which is a configuration fault. That straddle was raised as an
+objection four times and declined each time on the ground that both need a
+person and reach the same PAM code. The fifth time, the remedy went the other
+way: rather than splitting the status, take the second condition off it. The
+status now means one thing.
 
 **Why falling back to a default policy is forbidden.** A server with one
 configured backend has no reason to look at `service` at all, so the natural

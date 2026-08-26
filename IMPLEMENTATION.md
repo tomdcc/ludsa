@@ -765,11 +765,18 @@ sends someone hunting a codec bug that is not there. `VERSION_UNSUPPORTED` goes
 the other way for the same reason: no retry resolves a major version mismatch,
 and someone has to upgrade a package.
 
-One status straddles the code-versus-environment reading. `REQUEST_UNSUPPORTED`
-covers a message type a server does not implement and a `service` it does not
-recognise; the second is a configuration mismatch. It stays `PAM_SYSTEM_ERR`,
-because a retry improves neither and both need someone to look. Which one it was
-lives in `error_detail`.
+`REQUEST_UNSUPPORTED` means a message type a server does not implement, and
+nothing else. An unrecognised `service` used to share it and now has
+`SERVICE_UNSUPPORTED` in the response's own enumeration, `result` for
+AUTHENTICATE and `serving` for STATUS. Both still reach `PAM_SYSTEM_ERR`, since
+a retry improves neither, but an operator can now tell a version skew from a
+typo in `service=` without reading `error_detail`.
+
+**Do not map `SERVICE_UNSUPPORTED` onto an authentication failure**, however
+naturally a `result` other than `OK` falls into the deny branch. The `service`
+came from the module's own arguments and no user chose it, so `PAM_AUTH_ERR`
+blames the wrong party and hides a configuration error behind a login that
+merely fails.
 
 `REQUEST_MALFORMED` covers a field above its §3.1 maximum as well as a defect in
 the framing, and `error_detail` is again what separates them. A `credential`
