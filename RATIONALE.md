@@ -586,6 +586,28 @@ equality until it knows the type. Ordering is a property of the encoding and not
 of the decoded message, so a decoder that has verified it may hand fields to an
 application in any form it likes.
 
+**Why a sender emits no tag its version does not define.** The rule went in in
+the seventh round. Until then §5 forbade it for `ERROR` and nothing forbade it
+anywhere else, so a version 1.0 sender padding an AUTHENTICATE request with an
+unassigned tag was arguably conforming, and a driver had an asymmetry to
+hard-code with no reason behind it.
+
+Nothing breaks at the time. Every receiver skips an unrecognised optional tag,
+which is what makes the padding invisible. What breaks is later: §4.1 lets a
+minor version assign any tag number not yet used, so the padding a 1.0 peer
+emits today is a field some 1.1 peer reads tomorrow, and it reads it as a value
+its schema says is there. The sender is long deployed by then and the fault
+presents in the new implementation.
+
+It is the emission-side counterpart of never reusing a field number. Both rules
+exist because a tag that once meant nothing must not quietly start meaning
+something, and neither failure appears in any test the implementation that
+causes it can run.
+
+The rule binds a sender to its own version rather than to 1.0, which is what
+lets a later version emit at all, and §5's `ERROR` sentence became an instance
+of it rather than the only statement of it.
+
 **Why absence and emptiness are different.** An earlier wording told an emitter
 never to send a field empty, which conflated *I have no value for this* with *my
 value is zero octets*. The first is an absent optional field, which is omitted.
@@ -940,9 +962,10 @@ four ways of saying the same thing. Widening a field or making an optional field
 required produces a different tag, which is the retirement of one field and the
 addition of another rather than a change to be forbidden.
 
-**Why field number 0 is reserved.** §3.2's two emission rules together mean
-tags are strictly ascending, and the check that verifies them compares each tag
-against the one before, with zero as the value before the first. A tag of
+**Why field number 0 is reserved.** §3.2's ordering and at-most-once rules
+together mean tags are strictly ascending, and the check that verifies them
+compares each tag against the one before, with zero as the value before the
+first. A tag of
 `0x0000` is otherwise perfectly legal, being an optional fixed-width one-octet
 `integer` numbered 0, and it fails that comparison in first position.
 

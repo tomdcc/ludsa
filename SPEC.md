@@ -339,12 +339,19 @@ When it emits a message, a client or server MUST:
 - Emit a tag more than once only where the message type permits it. No version
   1.0 message type does, so under version 1.0 every tag appears at most once.
 - Omit an optional field that has no value.
+- Emit no tag its own version does not define for that message type.
 
 Ascending order binds every message, so a receiver checks it against the tag
 before it without knowing which schema applies. Whether a repeat is legal does
 not: only the message type says. §4 therefore checks the two at different
 points, and a receiver that rejects a repeat before it knows the type is
 refusing a message it cannot adjudicate.
+
+The last binds a sender to its own version and not to 1.0, because a later
+version emits tags 1.0 never assigned (§4.1). What it forbids is emitting a tag
+no version defines. A receiver skips one, so nothing breaks today; what breaks
+is later, when a minor version assigns that tag and a peer implementing it reads
+the padding as the field.
 
 A value of zero octets is a value, not an absent field. Whether one is
 acceptable is a decision for the receiving application, not for this protocol.
@@ -626,10 +633,10 @@ Response:
 | `status` | `enum`, 1 octet | required | `0x0181` |
 | `error_detail` | `utf8` | optional | `0x0243` |
 
-A version 1.0 server MUST NOT emit a field in an `ERROR` message other than
-these two, whatever the request it answers. A receiver applies §3.3 to any other
-tag it meets: it skips an optional one and rejects the message for a required
-one. A server SHOULD populate `error_detail`.
+§3.2 binds a server to the fields its own version defines, which for version
+1.0 are these two, whatever the request it answers. A receiver applies §3.3 to
+any other tag it meets: it skips an optional one and rejects the message for a
+required one. A server SHOULD populate `error_detail`.
 
 `status` states how the server handled the message. It states nothing about what
 the server decided, because an `ERROR` message means it decided nothing.
@@ -1278,9 +1285,11 @@ there is no end of file, and an envelope plus a kilobyte is far below
 `2 x MAX_LENGTH`.
 
 A driver checks the encoding of every response it receives: tags in ascending
-order, each recognised tag appearing at most once (§3.2). One further case pins
-what no other input reaches, since a server's own version word is not something
-a request can provoke:
+order, each recognised tag appearing at most once, and no tag the message type
+does not define (§3.2). The last is what a peer emitting padding fails, and it
+holds for every message type rather than for `ERROR` alone. One further case
+pins what no other input reaches, since a server's own version word is not
+something a request can provoke:
 
 | case | against | expected | needs |
 |---|---|---|---|
