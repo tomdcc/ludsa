@@ -719,11 +719,11 @@ never to send a field empty, which conflated *I have no value for this* with *my
 value is zero octets*. The first is an absent optional field, which is omitted.
 The second is a value, and whether it is acceptable is a question about
 credentials and role names rather than about framing. An empty `user` reaches
-the policy layer and finds no mapping, so it comes back `AUTHN_DENIED_POLICY`
-from a server that validated the credential first, or
-`AUTHN_DENIED_USER_UNKNOWN` from one that rejected the name before looking
-(§6.2). An empty credential fails validation for any real backend. All of those
-fail closed without the protocol having an opinion.
+the policy layer and finds no mapping, so it comes back
+`AUTHN_DENIED_USER_UNKNOWN` (§6.2.1), whether the server validated the
+credential first or rejected the name before looking. An empty credential fails
+validation for any real backend. Both fail closed without the protocol having an
+opinion about the value itself.
 
 ### 3.3 Tags
 
@@ -1715,6 +1715,26 @@ may know the user is unknown before it examines a credential, and a flat-file
 server would. So `AUTHN_DENIED_USER_UNKNOWN` implies nothing about the
 credential, and it fails the credential step, which is the earlier and safer of
 the two.
+
+**Why an unmapped `user` may not be answered `AUTHN_DENIED_POLICY`.** For six
+rounds it could be. A server that validated the credential and then found no
+mapping had established what `AUTHN_DENIED_POLICY` requires, so both codes
+described the case and the choice fell to how the server was built.
+
+The seventh round joined that to the paragraph two sentences away in Appendix B.
+The codes sit on opposite sides of the credential and authorisation split, so
+the same request fails `pam_sm_authenticate` against one conforming server and
+returns `PAM_SUCCESS` from it against another. A stack without an `account`
+line, which Appendix B already names as the fail-open, therefore admits the
+caller against the second server and denies against the first. Whether a
+deployment's omission is exploitable came down to which server it met, and no
+deployment can test for that.
+
+So the condition is assigned by whether the name resolves rather than by the
+order a server worked in, which is what both glosses said in the first place.
+Nothing is disclosed that was not disclosed before: every reason-naming code is
+optional and `AUTHN_DENIED` is always available, so the rule reaches only a
+server that had already chosen to name a reason.
 
 ### 6.3 STATUS
 

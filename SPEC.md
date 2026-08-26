@@ -1068,6 +1068,18 @@ valid, and a server MAY answer it without having examined one.
 `AUTHN_DENIED_POLICY` is the exception: a server MUST NOT answer it unless it
 established that the credential was valid, since that is what the code states.
 
+It carries a second precondition for the same reason. A server MUST NOT answer
+`AUTHN_DENIED_POLICY` where no mapping exists for the requested `user`, or where
+it resolved no identity from the credential. Those are what
+`AUTHN_DENIED_USER_UNKNOWN` names. The line is whether the name resolves and not
+which order a server did its work in. A name that resolves and is then refused
+is `AUTHN_DENIED_POLICY`, and a name that does not resolve is
+`AUTHN_DENIED_USER_UNKNOWN` whether or not the credential was examined first.
+
+Neither precondition asks a server to disclose anything. Every code that names a
+reason is optional and `AUTHN_DENIED` is always available, so this binds only a
+server that has chosen to name one, and says which name is true.
+
 A client that sent a `user` and must answer at two separate points derives both
 from this one value. A credential outcome fails the credential step. An
 authorisation outcome passes the credential step and fails the authorisation
@@ -1626,7 +1638,11 @@ step and fails the other.
 **That split is where a stack fails open.** A client that returns `PAM_SUCCESS`
 from `pam_sm_authenticate` for an authorisation outcome MUST document that its
 stack requires an `account` line. Without one a `AUTHN_DENIED_POLICY` admits the
-caller, and the module cannot detect the omission. §6.2 also leaves a server
-free to answer either `AUTHN_DENIED_USER_UNKNOWN` or `AUTHN_DENIED_POLICY` for
-an unmapped user, so the same deployment behaves differently against two
-conforming servers.
+caller, and the module cannot detect the omission.
+
+Which is why §6.2.1 forbids a server answering `AUTHN_DENIED_POLICY` for a
+`user` it has no mapping for. That condition used to reach either code, and the
+two sit on opposite sides of the split above, so the same request failed the
+`auth` phase against one conforming server and passed it against another. A
+deployment missing its `account` line was then exploitable or not depending on
+which server it met, which is not a property a deployment can test for.
