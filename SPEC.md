@@ -1354,6 +1354,27 @@ This is the only case that turns on who owns the socket rather than on the
 octets crossing it, so a driver needs two uids where every other case needs a
 byte string.
 
+One further case observes what a client does after it writes, which §2 requires
+of every client and no status reports. The driver accepts a connection, reads
+the request, and answers it:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A request written in full by the client under test | client | the driver reads end of file, and its response is then accepted for writing | |
+
+The two assertions are the two halves of §2's rule, and one of them fails
+without the other. A client that shuts down its write direction gives the driver
+end of file and stays readable. One that closes the connection outright gives
+the driver end of file too, and the write that follows draws `EPIPE`, or
+`SIGPIPE` where the driver has not suppressed one. The terms are §3's drain
+case's: a driver may suppress the signal or may treat termination by it as the
+failing outcome, and this document does not choose.
+
+Nothing here obliges a server to wait for end of file. It has the declared
+length and reads that many octets, so waiting would add a round trip to every
+exchange, and §2's check on octets beyond the declared length is a SHOULD it
+need not make exhaustive.
+
 It SHOULD reject the following. A conforming receiver may accept or reject it,
 so it carries no expected outcome:
 

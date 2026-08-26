@@ -149,6 +149,11 @@ regardless and find out from `EPIPE`, so any handler shaped around "read
 returned EOF, the client is gone, return early" is wrong, and it reads as
 reasonable code.
 
+That indistinguishability is also what §7's half-close case exploits from the
+other side. A driver cannot see which one a client did either, so it writes the
+response and lets the write report it. A client that used `close()` where §2
+asks for `CloseWrite()` fails there and nowhere earlier.
+
 ## Sizing a client's buffer
 
 Appendix A gives the per-message figures. No version 1.0 response exceeds 534

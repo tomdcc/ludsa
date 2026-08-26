@@ -42,6 +42,25 @@ closed connection is the obvious way to implement this wrongly, and it produces
 a server that works only against clients that omit the half-close. That is, only
 against non-conforming ones.
 
+**Why the half-close finally got a case.** For six rounds §2 stated it as a MUST
+and §7 reached it with nothing. Both server-side rules describe tolerating its
+absence, so the suite could not have failed a client that never half-closed at
+all, and the seventh round said so.
+
+The case has two assertions because §2 has two rules and one of them is passed
+by a client that breaks the other. A client that closes the connection outright
+gives a driver end of file exactly as a half-close does, so a case checking only
+for end of file admits it. What separates them is the write that follows: a
+half-closed connection is still readable by the client and takes the response,
+and a closed one draws `EPIPE`. That is the mechanism §3's drain case turns on
+as well, and it is why neither case needs a fixture.
+
+Nothing obliges a server to wait for end of file, and the case does not create
+such an obligation. A server has the declared length and reads that many octets,
+so waiting would put a round trip on every exchange to strengthen a SHOULD that
+§2 already says need not be exhaustive. The obligation sits on the client, which
+is where the cost of meeting it is nil.
+
 **Why the obligation to answer begins at the version word.** Silence tells a
 client nothing. It looks the same as a crash, a wrong socket path, or a server
 that closed for any other reason, so whoever is debugging starts from scratch.
