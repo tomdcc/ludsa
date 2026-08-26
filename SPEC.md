@@ -309,8 +309,8 @@ it does not recognise in any case.
 | `error_detail` | 512 |
 | `server_desc` | 512 |
 
-A receiver MUST reject a field above its maximum, except where §5 relaxes that
-for a server-sent value a client does not use. A server reports
+A receiver MUST reject a field above its maximum, except that §5 governs a
+client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
 `REQUEST_TOO_LARGE`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
 asked to send one reports `INVALID_REQUEST` (§7) to its host application,
@@ -429,11 +429,12 @@ unassigned type is unknown rather than impossible, and skipping it is what keeps
 §4.1's promise about an optional field a later version adds.
 
 The table gives the constraints a type implies. A receiver MUST reject a value
-that violates its type's rules, except where §5 relaxes that for a server-sent
-value a client does not use. A field's own definition may add others, and §3.1
-and §6 hold all of them. A client or server MUST NOT impose any beyond those. In
-particular it MUST NOT reject a control character except where a field's own
-definition forbids one, and no type but `utf8` requires a particular encoding.
+that violates its type's rules, except that §5 governs a client receiving
+`error_detail`, `server_desc` or `authn_id`. A field's own definition may add
+others, and §3.1 and §6 hold all of them. A client or server MUST NOT impose
+any beyond those. In particular it MUST NOT reject a control character except
+where a field's own definition forbids one, and no type but `utf8` requires a
+particular encoding.
 
 ### 3.4 Enumerated values
 
@@ -660,9 +661,10 @@ any enumeration's 1, and it is what a client records for a status it does not
 recognise. §7 gives a client the names for what it finds in a response.
 
 A client MUST NOT report a `REQUEST_` code for a fault it found itself. The
-names exist so a caller can tell the two apart: an operator reading
-`REQUEST_TOO_LARGE` shortens a credential, and one reading §7's response codes
-goes to the server.
+names exist so a caller can tell the two apart. An operator reading
+`INVALID_REQUEST` (§7) shortens a credential. One reading `REQUEST_TOO_LARGE`
+has a peer that sent what §3.1 forbids it to send. One reading §7's other
+response codes goes to the server.
 
 `REQUEST_MALFORMED` means the sender produced invalid structure. A message that
 stopped early is `REQUEST_INCOMPLETE`, and one that was well-formed but
@@ -707,10 +709,13 @@ condition and not the octets: "trailing whitespace", or "exceeds 16384
 octets".
 
 It MUST NOT contain a control character, meaning U+0000 to U+001F, U+007F, and
-U+0080 to U+009F, so that a receiver may write it to a line-oriented log without
-escaping. A server that embeds text from elsewhere in it MUST render that text
-safely first, and MUST NOT let that text push the field above its §3.1 maximum.
-It shortens what it embeds, not the message. §3.1's rule against truncating a
+U+0080 to U+009F, so that a receiver may write it as a datum to a line-oriented
+log without escaping it. The guarantee is about the value's content, not about
+what a receiver may pass it to: it is data, and a receiver MUST NOT use it as a
+format string, a template, or anything else that interprets what it contains. A
+server that embeds text from elsewhere in it MUST render that text safely
+first, and MUST NOT let that text push the field above its §3.1 maximum. It
+shortens what it embeds, not the message. §3.1's rule against truncating a
 value binds a receiver rejecting one, not a server describing one.
 
 A client MUST NOT log `error_detail`, return it, or otherwise act on it until it
@@ -724,6 +729,13 @@ and the encoding, §3.1 bounds the length, and §3.3 forbids the NUL. So a clien
 meeting one has found a bug in the server rather than a value to work around,
 and reporting it is what gets the bug fixed. More tolerant handling is a
 client's own choice, and this document does not specify it.
+
+Tolerance has one bound. A client MAY render a defective value in a transformed
+form to log it or report it, since a fault nobody can describe is a fault nobody
+fixes. It MUST NOT act on the transformed form as though it were the value.
+Substituting a replacement character for an invalid sequence in `authn_id` and
+then using the result as an identity is the case that matters, because two
+identities differing only in the defective octets become one.
 
 The control-character range is over code points, not octets, and the test falls
 out of the same pass that validates the encoding. A receiver MUST NOT test the
@@ -1142,7 +1154,7 @@ status (§4). Both conform, so it is not a case here and a driver MUST NOT recor
 either as a failure.
 
 Some of these depend on how the peer under test is configured, which this
-document does not specify. A driver MUST be given all five:
+document does not specify. A driver MUST be given all of them:
 
 - **F1**: a `service` value the peer recognises, and one it does not.
 - **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
@@ -1247,9 +1259,14 @@ error, including one that appears more than once. It MUST accept a message whose
 declared length is exactly the minimum for the version, which a `PING_REQUEST`
 carrying no fields is, and a field whose value is exactly its §3.1 maximum. It
 MUST report an enumerated value it does not recognise as that enumeration's 1
-(§3.4) and MUST NOT report it as an
-affirmative outcome, so a `result` of 200 is `AUTHN_UNKNOWN` and never `OK`, and
-so is a `result` of 0.
+(§3.4) and MUST NOT report it as an affirmative outcome, so a `result` of 200 is
+`AUTHN_UNKNOWN` and never `OK`, and so is a `result` of 0.
+
+A receiver MUST skip an unrecognised optional tag whose field number equals that
+of a tag the message type does define, and read the defined field from its own
+whole tag. §3.3 matches a tag whole and never by field number. `0x0242` placed
+before `0x02C4` in an `AUTHENTICATE_REQUEST` drives this against a server, and
+`0x0243` before `0x0281` in an `AUTHENTICATE_RESPONSE` against a client.
 
 **A client reports a fault to its caller.** It has no status to send: a fault it
 found in a response is not a statement about the request it sent, and a request

@@ -510,6 +510,24 @@ fine.
 
 ## Decoding into a struct
 
+**Key the schema on the whole tag, not on the field number.** The field number
+is the tag's high octet, so tags sort by it and §6.4's table reads as though the
+number were the identifier. It is not. §3.3 matches a tag whole, and two tags
+sharing a number are two different tags.
+
+A `map[uint8]field` keyed by number looks natural and is wrong. `0x0242` is
+optional, dynamic, `string`, field number 2, and it passes every shape check;
+`credential` in an `AUTHENTICATE_REQUEST` is `0x02C4`, also number 2. Sent in
+that order they ascend, so the framing pass accepts both, and a number-keyed
+decoder either stores the first into `credential`'s slot or rejects a message it
+should have accepted. `0x0243` before `0x0281` is the same shape against a
+client, putting `error_detail`-shaped bytes where `result` belongs.
+
+No conforming peer produces this: §4.1 requires a later version's field to take
+a number higher than every number already assigned in that message type, so
+number 2 can never be reassigned in `AUTHENTICATE_REQUEST`. It is what a broken
+or hostile peer sends, and §7 drives it against both sides.
+
 **Absent and empty are different, and a struct field cannot hold both.** §3.2
 makes a value of zero octets a value rather than an absent field, so `""` from a
 decoder means one thing for a required field and two for an optional one.
@@ -686,6 +704,32 @@ field. The property to preserve is byte fidelity: the bytes must stay
 recoverable even when their encoding is unknowable. Display correctness is not
 achievable without an encoding nobody has, and byte loss is the half that can be
 avoided.
+
+**The client's logging hazard is the opposite one, and it is worse.** A server
+guarantees `error_detail`, `server_desc` and `authn_id` are free of control
+characters and valid UTF-8 (§5), so a client has nothing to escape. What it has
+instead is a value it may be tempted to hand straight to a logging call.
+
+`pam_syslog(pamh, LOG_ERR, fmt, ...)` is `printf`-shaped, so
+
+```c
+pam_syslog(pamh, LOG_ERR, error_detail);        /* wrong */
+pam_syslog(pamh, LOG_ERR, "%s", error_detail);  /* right */
+```
+
+`%` is not a control character and is valid UTF-8, so §5's guarantee does not
+exclude it, and §5 says so: the value is safe as a datum and a receiver must not
+use it as a format string. §5 also has a server embed text from elsewhere in the
+field, so the `%` need not come from a hostile server to arrive.
+
+The consequence is not the same as the server's. `pam_ludsa` is loaded into an
+`sshd` running as root. The server may be an unprivileged sidecar. So a format
+string turns "a compromised server can admit users" into "a compromised server
+runs code as root".
+
+Do not rely on the toolchain for this. `FORTIFY_SOURCE` blocks `%n` in a
+writable format string on most distributions, but not on all of them, and `%s`
+against an arbitrary pointer reads regardless.
 
 ## Rate-limiting STATUS
 

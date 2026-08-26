@@ -629,6 +629,20 @@ the type, so a receiver can skip a field of a type it has never heard of. The
 consistency check cannot reach an unassigned type for the same reason it is safe
 to skip one: nothing says whether it is fixed or dynamic.
 
+**Why the high-octet layout needed a conformance case to defend it.** Moving the
+field number into the high octet made tags sort by number, which is what the
+sixth round wanted, and it made a number-keyed decoder look natural for the
+first time. §6.4's table now reads as though the number were the identifier. The
+rule that it is not did not change, and nothing drove it.
+
+Two tags sharing a number are two different tags, and the framing pass accepts
+both, since they ascend. A decoder keyed on the number puts one field's value
+where another belongs. No conforming peer sends that, because §4.1 makes a later
+version take a higher number than any already assigned in the message type, so
+the construction is a broken or hostile peer's. That is enough to want a case:
+the numbering in §6.4 is a defence against exactly this confusion, and a defence
+nothing exercises is a defence nobody has checked.
+
 **Why the whole tag is validated rather than its parts.** A tag is an identifier
 that happens to have structure, not a field number with metadata attached. A
 sender that labels `user` as an integer has not sent `user` with a wrong type;
@@ -1156,6 +1170,53 @@ natural way to write that quotes the value. For every other field that is useful
 and harmless. For the one field that is a bearer token it is a disclosure with
 no bound on where it travels, and nothing in the conformance suite compares
 `error_detail` content, so no test would ever show it.
+
+**Why tolerance has a bound but logging does not.** §5 leaves what a client does
+beyond reporting to the client, which is right: a defective `error_detail` is a
+diagnostic, and sanitising one for a log is a reasonable thing to do with it. A
+defective `authn_id` is not a diagnostic. It is the value §6.2 has a client
+authorise on when it sent no `user`.
+
+So the line is between rendering and acting. A client may transform a defective
+value to describe it, because a fault nobody can describe is a fault nobody
+fixes, and the server's own logger is told to do exactly that with bytes it
+cannot encode. What it may not do is treat the rendered form as the value. The
+hazard is the one this document already describes for a server's JSON handler,
+one layer further on: a replacement character collapses two identities that
+differ only in their defective octets into one, and a client that authorises on
+the result grants a token the wrong identity.
+
+Truncation needed no new rule. §3.1 already says no party may truncate a value
+to fit, which reaches a receiver shortening an over-long `authn_id` as readily
+as a sender.
+
+**Why the safe-to-log guarantee says what it is not.** The guarantee is about
+content: no control character, valid UTF-8, inside the maximum. An earlier
+wording stopped at "so that a receiver may write it to a line-oriented log
+without escaping", which is true and is read as more than it says. The receiver
+that matters is a PAM module, and the line-oriented log call it has is
+`pam_syslog`, which is `printf`-shaped. Nothing in the banned set excludes `%`,
+because `%` is not a control character.
+
+The seventh round raised this as a format-string bug and it is worth stating in
+the normative text rather than only in guidance, because the misreading comes
+from the normative sentence. The rule is stated without naming a language: the
+value is data, and a receiver may not use it as a format string, a template, or
+anything else that interprets its content. That covers `printf`, a `%`-format in
+Python, and the log4j class of defect in one sentence.
+
+The consequence is not symmetric with the server's logging hazard. A forged log
+line misleads whoever reads it. A format string in a module loaded into an
+`sshd` running as root, where the server may be an unprivileged sidecar, turns a
+compromised server into code execution.
+
+**What was declined with it.** The same round proposed banning U+2028, U+2029
+and the bidirectional overrides. Neither earns a place in the banned set. U+2028
+and U+2029 do not terminate a line for syslog or for a text log, and the parsers
+that once choked on them do not any more. The overrides mislead a human reading
+a line rather than forging one, which is a different class, and banning them
+would put a filtering obligation on every server and cut against §3.3's rule
+that a receiver imposes no constraint a field's own definition does not carry.
 
 **Why the receiver's check is at the point of use.** The producer's obligation
 alone leaves nothing that must ever look, so a client may take the guarantee at
