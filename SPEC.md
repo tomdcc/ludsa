@@ -1134,8 +1134,11 @@ response type carries.
 A server that has lost a dependency but still holds the material it needs to
 validate a new credential is serving. One validating against a previously
 downloaded key set is in that position: the signature checks without reaching
-the dependency, and revocation does not. A server MAY decline to answer at all
-while it cannot check revocation, and reports `NOT_SERVING` where it does.
+the dependency, and revocation does not. A server MAY decline to authenticate
+at all while it cannot check revocation, and reports `NOT_SERVING` where it
+does. Declining to answer a STATUS request is not open to it: §2 obliges an
+answer once it has read `ludsa_version_major`, and `NOT_SERVING` is that
+answer.
 
 A server that can answer only for principals it has already decided is not
 serving, whatever it holds in cache. Answering a new principal is what `SERVING`

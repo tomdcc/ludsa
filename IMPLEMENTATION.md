@@ -602,6 +602,23 @@ and answers `OK` on any valid credential, while the client that sent the empty
 `user` believes it was checked. Nothing on the wire distinguishes that from a
 correct answer.
 
+**The encoder loses the same distinction, and `omitempty` is how.** Everything
+above is about decoding, and a Go encoder throws the distinction away before the
+octets exist. §3.2 says to omit an optional field that has **no value**;
+`json:",omitempty"` and every reflex modelled on it omits a field whose value is
+**empty**, which is the other thing. A zero-octet `user` becomes an absent
+`user`, and §6.2 reads those as opposite instructions.
+
+It bites the conformance driver first. F3's second decision case sends a
+credential the peer accepts with a `user` of zero octets, and an encoder with
+that reflex rewrites the case into the absent-`user` path before it leaves the
+process. The driver then reports a pass for a case it never sent.
+
+Model an optional field so absence and emptiness are distinct in the type, a
+pointer or an explicit presence flag, and have the encoder emit on presence
+rather than on non-emptiness. The same applies to `max_age`, where absent and
+zero are opposite instructions in the other direction.
+
 **A field absent from the wire decodes as zero, and §3.4 is what makes that
 safe.** §5 has an `ERROR` message carry no field but `status` and
 `error_detail`, so a `result` decoded from one was never sent. Its zero value is
@@ -800,9 +817,16 @@ Set the floor from what the dependency tolerates, and document it. A client that
 wants only cheap health should omit `max_age` rather than send a large value,
 since an absent `max_age` places no obligation on the server at all.
 
-The budget that matters for §2's connection bound is `MAX_LENGTH` multiplied by
-the concurrency limit, not one message. §3 fixes the first, so the concurrency
-limit is the only one a server sets.
+For a server that holds each message whole, the budget that matters at §2's
+connection bound is `MAX_LENGTH` multiplied by the concurrency limit, not one
+message. §3 fixes the first, so the concurrency limit is the only one such a
+server sets.
+
+Nothing requires holding a message whole. §3 forbids allocating from a declared
+length before it is checked, and forbids allocating for the body of a message
+being rejected at all, so a server that validates as it reads and discards on
+the drain path holds a field at a time rather than 32768 octets. Its budget is
+its own to work out, and it is far below the product above.
 
 ## Mapping to PAM
 
