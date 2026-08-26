@@ -413,6 +413,11 @@ version it can parse.
 What the case cannot settle is a server whose drain bound is shorter than the
 round trip. It stopped draining legitimately and looks exactly like one that
 never started, which is why the bound is a fixture rather than an assumption.
+Nor can it separate a draining server from one that shut down its write
+direction and never read: both accept the driver's write, since a kilobyte fits
+in a receive buffer nobody is emptying. What the case detects is the close, and
+the close is the hazard, because it is the one that reaches a client
+mid-credential as `EPIPE`.
 
 **Why the count is twice `MAX_LENGTH`.** §4.1 freezes `MAX_LENGTH` within major
 version 1, but a later major version may raise it, and the exchange where that
@@ -504,7 +509,8 @@ which left a client holding the same `OK` and the same nothing. The graceful
 path went to the more suspicious input, and one field's handling was split
 across two sections that disagreed.
 
-The rule now covers all three fields and all four defects. A server is bound to
+The rule now covers every one of those fields and every defect. A server is
+bound to
 emit none of them, so a client meeting one has found a bug rather than a value
 to work around. Reporting it is what gets the bug fixed, and a defect that is
 quietly absorbed is a defect nobody fixes. What a client does beyond reporting
@@ -553,11 +559,20 @@ tags are load-bearing. An encoder that violates either still round-trips against
 its own decoder, and only the vectors catch it.
 
 **Why at-most-once belongs to the message type and not to the framing.** It
-looks like a framing rule and was one until the fifth round. It is not: a repeat
-is only illegal because no version 1.0 message type permits one, and a later
-minor version may add a type that does. A receiver that rejects a repeat before
-it has read `msg_type` is refusing a message it has no schema for, which breaks
-§4.1's promise that a new message type is a minor bump.
+looks like a framing rule and was one until the fifth round. It is not: whether
+a tag may repeat is a property of the message type's schema, and holding that
+schema is the only way a receiver knows the answer. A receiver that rejects a
+repeat before it has read `msg_type` is asserting something about a message type
+it may not implement, which breaks §4.1's promise that a new message type is a
+minor bump.
+
+No version 1.0 message type permits a repeat, but that is a fact about the
+schemas this version defines rather than about the framing. §4.1 freezes only
+the loosening: a tag assigned as non-repeatable stays that way, because a peer
+that predates the change holds a schema for the tag and would meet duplicates it
+has no rule for. A later minor version may assign a field that is repeatable
+from the start, which a predating peer never adjudicates at all, because it does
+not recognise the tag.
 
 That promise had already been rescued once, when tag recognition and
 required-field presence moved after `msg_type` for the same reason. The repeat
@@ -812,13 +827,23 @@ commitment §3 holds down to two octets. Widening that to a whole
 message buys a diagnostic and spends the freedom a major version exists to
 provide.
 
-**Why the minor version exists at all, given nothing acts on it.** It has a
-couple of uses, neither of which changes behaviour:
+**Why the minor version exists at all, given no verdict turns on it.** It has a
+couple of uses:
 
 - It puts version skew in a log for every authentication rather than only at
   startup, which matters because the two sides ship separately.
-- It lets a client tell an unsupported field apart from a supported field that
-  is absent, which §3.2 otherwise makes indistinguishable.
+- It lets a server tailor what it sends. A later version that adds an optional
+  diagnostic field can carry the same information to an older client in a field
+  that client already understands, rather than dropping it.
+
+An earlier draft claimed a third: that it lets a client tell an unsupported
+field apart from a supported field that is absent. That cannot work. A field a
+later version adds is optional, since a required one forces a major bump, and an
+optional field may be absent because the peer had no value for it. Absence stays
+ambiguous whatever version the peer declares, so no rule about what a declared
+minor version implies could rescue the inference. The sixth round deleted the
+claim rather than inventing the capability rule it needed, which would have been
+a MUST no driver could test.
 
 It must not inform a decision, for the same reason `pid` must not. It is a
 peer-supplied value, and under *checked, never consulted* such a value may be
@@ -839,15 +864,29 @@ the order a decoder is written in, so the rule costs nothing to follow.
 Framing before `msg_type` is the part worth stating. It means a server fully
 parses a request it is about to refuse, which is cheap on a bounded message.
 
-Steps 3 and 4 are the one pair that interleaves, and the fifth round had to say
-so. A receiver cannot know whether the declared octets will all arrive until
-they do, so ordering arrival strictly before framing would make it defer every
-framing verdict to the end of the message. §3 is built the other way: its drain
-protocol exists for nothing but rejecting before the message has arrived, and a
-client's fixed receive buffer depends on the same freedom. So a message both
-truncated and malformed in the octets that arrived takes either status, and §7
-excludes it as a case rather than choosing one, on the same footing as a request
-that stalls before its version word.
+Waiting for the declared octets is the one step that holds up every other, and
+the fifth round said so about framing before the sixth generalised it. A
+receiver cannot know whether the octets will all arrive until they do, so
+ordering arrival strictly first would make it defer every verdict to the end of
+the message. §3 is built the other way: its drain protocol exists for nothing
+but rejecting before the message has arrived, it requires the response to be
+written before the drain begins, and a client's fixed receive buffer depends on
+the same freedom. So a message both truncated and faulty in the octets that
+arrived takes either status, and §7 excludes it as a case rather than choosing
+one, on the same footing as a request that stalls before its version word.
+
+The fifth round paired arrival with framing alone, which left the message type
+as the one place a receiver holds a settled verdict and may not report it. A
+server that has read a `msg_type` it does not implement had to go on waiting for
+a declared seventeen kilobytes before it could say so, because a truncation
+would have taken the status instead. Nothing about an unimplemented type becomes
+truer by waiting, and an unimplemented major version is already answered off the
+envelope alone.
+
+The generalisation needs its own bound, or it would license an early verdict on
+a field that has not arrived yet. Required-field presence, the selectors, the
+limits and the decision are not detectable early: a field is missing only once
+the message ends. Those still wait.
 
 What goes in that pass is only what holds without a schema, and the boundary
 moved in the fifth round. It used to include the at-most-once rule, on the
@@ -856,13 +895,17 @@ reasoning that a newer client sending a later message type expects
 `REQUEST_UNSUPPORTED` to a message that is *also* corrupt lets a genuine encoder
 bug be swallowed by that fallback.
 
-That reasoning was sound and its premise was not. A repeat is illegal only
-because no version 1.0 message type permits one, so a receiver rejecting one in
-a type it does not implement is asserting a violation it cannot establish. The
-cost of the change is the swallowed encoder bug, which needs a client to be
+That reasoning was sound and its premise was too narrow. Whether a tag may
+repeat is a property of the message type's schema, so a receiver rejecting a
+repeat in a type it does not implement is asserting something it holds no schema
+to establish. §4.1 freezes the loosening of an assigned tag rather than
+repeatability itself, so a later minor version may still assign a repeatable
+field, and the question stays one only a schema answers.
+
+The cost of the change is the swallowed encoder bug, which needs a client to be
 using an unimplemented message type *and* to have a broken encoder. The cost of
-keeping it was refusing a legal message and blocking a minor-version rollout,
-which needs neither.
+keeping it was refusing a message on an assertion the receiver could not
+make.
 
 Only the framing a receiver can check without a schema goes there. Tag
 recognition and required-field presence go after `msg_type`, because §3.3
@@ -897,9 +940,14 @@ the possibility.
 
 **Why a field number is never reused.** Reusing a number for a differently-typed
 successor makes every log line and packet dump ambiguous about which field it
-meant. Numbers are not scarce at 256 per message type, and a lifetime budget
-that large will not bind. A retired number therefore needs recording, or the
-next author sees a gap and takes it.
+meant. Numbers are not scarce at 255 per message type, and a lifetime budget
+that large will not bind.
+
+The sixth round made the gaps safe rather than merely documented. A later
+version must take a number higher than every number already assigned in its
+message type (§4.1), so a retired number is closed by the same rule that keeps a
+new field sorting after every existing one, and the next author cannot see a gap
+and take it.
 
 **Why a required field forces a major bump.** Every older peer rejects a message
 carrying a required tag it does not recognise. Such a field is a new major
@@ -931,6 +979,20 @@ unassigned deletes both. It also makes a zeroed `ERROR` message fail closed
 through §3.4, which is the rule the other two enumerations were later brought
 into line with.
 
+**Why the status leaves 2 unassigned as well.** §3.4 holds the affirmative
+outcome at 2 in every enumeration that has one. The fifth round moved `OK` and
+`SERVING` there without checking the enumerations against each other, which put
+`REQUEST_MALFORMED` at the same number as both, so a client that read a status
+out of a message it had misdispatched turned the commonest rejection into an
+approval. Before that round it had read as a denial and failed closed.
+
+Leaving 2 empty in the one enumeration with no affirmative case restores it and
+states it as an invariant rather than an accident: no value assigned in one
+enumeration is affirmative in another. The cost is one number of 255 in a
+namespace this sparsely used. §6.4 already spends numbering on the same
+hazard, so a receiver that misdispatches meets two defences rather than one, and
+neither is the `msg_type` check that should have caught it first.
+
 **Why two enumerations rather than one.** A status says how the server handled
 the message. A result says what it decided. One enumeration would make every
 code valid in both positions, and about half of them are meaningless in each: a
@@ -945,11 +1007,11 @@ names for what a client found in a *response*, which gave one name two opposite
 meanings and left a caller unable to act on either.
 
 The `REQUEST_` prefix says what the enumeration always meant. It goes on the
-five codes that name a fault in the request, and not on the five that describe
-the server's own state or the pair's compatibility, because those carry no
-direction to state. `STATUS_UNKNOWN` is the eleventh and no server emits it. A
-naming scheme that half the codes follow looks arbitrary until you notice the
-other half are not about the request at all.
+codes that name a fault in the request, and not on those describing the server's
+own state or the pair's compatibility, because those carry no direction to
+state. `STATUS_UNKNOWN` belongs to neither family and no server emits it. A
+naming scheme only some of the codes follow looks arbitrary until you notice the
+rest are not about the request at all.
 
 The response codes are deliberately not members of that enumeration. A server
 can never send one, so giving them numbers would spend wire vocabulary on values
@@ -957,12 +1019,12 @@ that are illegal in both directions. They are a client's contract with its
 caller, they are a SHOULD, and a client with better names for its own host is
 still conforming.
 
-Three names cover what a client can find, because that is all it can
-distinguish. A response either never started, or started and stopped, or arrived
-and was wrong. `RESPONSE_ABSENT` and `RESPONSE_INCOMPLETE` stay separate because
-their causes differ: nothing arriving is usually a refused peer or a wrong
-socket path, and a truncated response is usually a crash. Both map to the same
-PAM code, so the distinction earns its keep in a log rather than at the stack.
+The names cover what a client can find, because a response either never
+started, or started and stopped, or arrived and was wrong. `RESPONSE_ABSENT`
+and `RESPONSE_INCOMPLETE` stay separate because their causes differ: nothing
+arriving is usually a refused peer or a wrong socket path, and a truncated
+response is usually a crash. Both map to the same PAM code, so the distinction
+earns its keep in a log rather than at the stack.
 
 **Why `REQUEST_MALFORMED` is narrow.** It maps to a PAM code that tells an
 operator to file a bug, so anything reported through it had better be a bug.
@@ -1061,10 +1123,16 @@ is tolerable depends on traffic this document knows nothing about. A MUST here
 would bind deployments to a number nobody can pick for them.
 
 **Why `UNAVAILABLE` and `INTERNAL_ERROR` are separate.** Both mean no verdict
-was reached, and an operator does different things about them. `UNAVAILABLE`
-points at a dependency, and `INTERNAL_ERROR` at a bug. Reporting a bug as
-`UNAVAILABLE` sends whoever is on call to inspect infrastructure that is working
-correctly, and the real cause then survives every restart.
+was reached, and an operator does different things about them: one waits or
+falls through, the other fetches a person. Reporting a condition that needs a
+person as `UNAVAILABLE` sends whoever is on call to inspect infrastructure that
+is working correctly, and the real cause then survives every restart.
+
+An earlier draft of this entry sorted them by whose component failed, which the
+entry above supersedes and which the sixth round found still standing in §5's
+table. Fault ownership is a heuristic that agrees with the real test most of the
+time and not always: a dependency refusing the server's own credentials is
+someone else's component and still needs a person here.
 
 **Why an `ERROR` message still carries `error_detail`.** A rule that a failed
 response carries no fields at all reads well until §3.1 asks a server to name
@@ -1537,7 +1605,7 @@ is a real interoperability failure with no other home: `IMPLEMENTATION.md` is
 non-normative and read by nobody by design, so a module author working from the
 specification alone would never meet it.
 
-**Why the `account` line is the one requirement.** `AUTHN_DENIED_POLICY` returns
+**Why the `account` line carries a requirement.** `AUTHN_DENIED_POLICY` returns
 `PAM_SUCCESS` from `pam_sm_authenticate`, so a stack without an `account` line
 admits a caller the server denied. That is a fail-open produced by a convention
 rather than by a wire rule, and no conformance case can see it. Binding the

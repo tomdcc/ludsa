@@ -135,7 +135,8 @@ There are two strategies:
 
 **The fixed buffer is permanently correct, not correct for now.** That is worth
 spelling out, because the obvious worry is that a later minor version makes 534
-too small, and the obvious fixes for it are all unnecessary. Four rules combine:
+too small, and the obvious fixes for it are all unnecessary. These rules
+combine:
 
 - §4.1 freezes field maxima, so `authn_id` can never exceed 512 in major
   version 1. Nothing a client already stores can grow.
@@ -190,16 +191,20 @@ if l > uint32(len(buf)-off) { return ErrMalformed }   // right
 ## Draining a rejected message
 
 §3 requires a server that rejects before reading the whole message to send its
-response, then read and discard until the earliest of four conditions. It is the
-one path where a server reads from a connection it has already given up on, and
-the obvious Go call and the obvious hand-rolled loop behave differently at EOF.
+response, then read and discard until the earliest of several conditions. It is
+the one path where a server reads from a connection it has already given up on,
+and the obvious Go call and the obvious hand-rolled loop behave differently at
+EOF.
 
-`io.CopyN(io.Discard, conn, 2*MaxLength)` returns `io.EOF` when the peer has
-half-closed, which is the normal case under §2, and that is the condition that
-ends the drain rather than an error. A hand-rolled `for { n, err := conn.Read(b)
-... }` that does not treat `n == 0 && err == io.EOF` as terminal spins at full
-CPU until the deadline, which is a remote unauthenticated CPU burn reachable
-without authenticating.
+`io.CopyN(io.Discard, conn, 2*MaxLength-alreadyRead)` returns `io.EOF` when the
+peer has half-closed, which is the normal case under §2, and that is the
+condition that ends the drain rather than an error. The subtraction is part of
+the rule: §3 counts the bound from the whole connection, "counting the envelope
+and everything already read before it rejected", so a bare `2*MaxLength`
+overshoots by whatever the server had consumed before it gave up. A hand-rolled
+`for { n, err := conn.Read(b) ... }` that does not treat `n == 0 && err ==
+io.EOF` as terminal spins at full CPU until the deadline, which is a remote
+unauthenticated CPU burn reachable without authenticating.
 
 The response goes out before the drain starts, so a client blocked in `read`
 gets its answer without waiting for the drain to finish.
@@ -495,7 +500,9 @@ message type. `==` is a repeat, which step 7 judges against the schema, so a
 scanner should record it and let the dispatch decide rather than reject on the
 spot. For every version 1.0 type the answer is the same; for a message type the
 server does not implement it is `REQUEST_UNSUPPORTED`, and rejecting early gets
-that wrong.
+that wrong. Track only the tags your schema defines: §3.3 has you skip every
+occurrence of an unrecognised optional tag, since a later minor version may
+assign one that repeats and you hold no schema to judge it by.
 
 After the scan the representation is free. Ordering is a property of the
 encoding and not of the decoded message, so handing an application a map is
@@ -553,10 +560,11 @@ has the client abort rather than skip, and it reports the response as malformed
 out.
 
 Had `status` and `result` shared a tag, the same client would have read a
-protocol rejection as a decision. Every value that names a status now names a
-different outcome as a result, and both enumerations leave 0 unassigned, so the
-confusion misreports rather than granting. Unlike the absent-field hazard above,
-it survives a decoder which correctly requires the field to be present.
+protocol rejection as a decision. §3.4 holds the affirmative outcome at 2 in
+every enumeration that has one and leaves 2 unassigned in `status`, which has
+none, so no status value read as a result is `OK` and the confusion misreports
+rather than granting. Unlike the absent-field hazard above, it survives a
+decoder which correctly requires the field to be present.
 
 None of which licenses skipping the `msg_type` check. §6 makes it a MUST, the
 numbering is a second line rather than the first, and `0x0443` is still
@@ -718,8 +726,9 @@ octets may be a token a client passed through exactly as it was given. Both stay
 `PAM_SYSTEM_ERR`, because a retry improves neither and both need someone to
 look. Which one it was lives in `error_detail`.
 
-**The `account` line is the appendix's one requirement, and `pam_ludsa` has to
-document it.** An authorisation outcome returns `PAM_SUCCESS` from
+**The `account` line is a requirement the appendix places on a client, and
+`pam_ludsa` has to document it.** An authorisation outcome returns
+`PAM_SUCCESS` from
 `pam_sm_authenticate` by design, so a stack without an `account` line lets a
 `AUTHN_DENIED_POLICY` admit the caller. The module cannot detect the omission at
 run time, so the manual page carries it and says why.
@@ -783,10 +792,13 @@ which matters depends on the traffic. What is worth stating is that choosing
 
 ## Peer credentials
 
-The specification does not require either side to check the other, because
-filesystem permissions are the access control the protocol relies on. Checking
-anyway is worthwhile in most deployments, and §5 gives a server that does a
-status to report it with.
+§2 binds a client that was configured with an expected server identity. It must
+confirm the peer before it writes, and close and report `CONNECTION_FAILED`
+where it cannot. A client configured with none owes nothing.
+
+Nothing binds a server. Filesystem permissions are the access control the
+protocol relies on. A server that checks anyway is worth the trouble in most
+deployments, and §5 gives it a status to report the refusal with.
 
 **Where the check goes is now a choice rather than a constraint.** At accept, a
 server has nothing to answer in and closes without replying, which costs it the
@@ -821,12 +833,17 @@ A server that logs both should log the claimed pid and the attested pid as
 separate fields, rather than substituting one for the other. Otherwise the
 logged value means different things in different deployments.
 
-**A client has more to lose than a server does, and §8 leaves it unaddressed.**
-A socket an attacker planted receives the credential and then answers whatever
-it likes, which is an authentication bypass rather than only a disclosure. The
-protocol says nothing about it because no single check works everywhere. Two do
-between them, and a client should be configurable for whichever its deployment
-supports:
+**A client has more to lose than a server does, which is why §2 binds it.** A
+socket an attacker planted receives the credential and then answers whatever it
+likes. That is an authentication bypass rather than only a disclosure.
+
+§8 leaves the mechanism unspecified, because no single check works everywhere.
+§2 keys the obligation to configuration instead. §7 drives it with F5, a driver
+socket owned by a uid the client was not configured to expect, and asserts the
+client writes no octet.
+
+These are the checks a client can be configured for. It should support whichever
+its deployment allows:
 
 - **The peer's uid**, via `getpeereid` or `SO_PEERCRED`, compared against a
   configured value. Read it after `connect()` and *before* writing any part of
