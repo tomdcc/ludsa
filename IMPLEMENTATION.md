@@ -39,12 +39,28 @@ asking for anyway.
 The fault is invisible under `net.Pipe`, which has its own deadline
 implementation, and invisible in any test where the deadline never fires.
 
+**The read direction latches too, and there the latch is right.** After the read
+deadline fires, `io.CopyN(io.Discard, conn, ...)` returns
+`os.ErrDeadlineExceeded` having read nothing, so the §3 drain never runs. Do not
+reset the read deadline to make it run. §3 lists that deadline among the drain's
+terminators, so on the `REQUEST_TIMEOUT` path it had already expired and no
+drain was owed: the server writes its status and closes. Resetting it lets the
+one client that already used its whole deadline hold the connection for a second
+one.
+
+Every other early rejection is settled while the deadline still runs, so the
+drain there is a normal read and `io.CopyN` behaves. This is the only path where
+the two rules meet, and the tell is that a server "fixing" the latch drains on
+exactly the exchange with least claim to it.
+
 **Keep the request deadline and the dependency deadline apart.** They are
 sequential phases of one exchange and must not share a `context`. One
 `context.WithTimeout` threaded through the socket read and the backend call
 reports a slow dependency as `REQUEST_TIMEOUT`, which §5 defines as the request
 not having arrived. The request deadline ends when the request is complete, and
-the dependency call takes a fresh one whose expiry is `UNAVAILABLE`.
+the dependency call takes a fresh one whose expiry is `UNAVAILABLE`. On a
+request that never completes because the server rejected it early, that deadline
+does not end at all: §3 has it bound the drain.
 
 Both map to `PAM_AUTHINFO_UNAVAIL`, so the outcome is identical and only the
 diagnosis differs. That is why the mistake survives testing, and why it costs an

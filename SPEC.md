@@ -274,6 +274,13 @@ close, not answer: §2 has a server respond `REQUEST_TIMEOUT` where the deadline
 expires before it has answered, and on this path it has answered already. A
 server sends one response to a connection.
 
+Where it expired before the response went out, the earliest terminator is
+already met and the drain ends at once. So a server answering `REQUEST_TIMEOUT`
+writes and closes, discarding nothing, and that is the only rejection with no
+drain behind it: every other one is settled while the deadline still runs. The
+client is not left without its answer, since a response already written survives
+the close (§2), and it may take `EPIPE` on a write it had not finished.
+
 The status it sends is the one it had determined when it rejected the message.
 Neither §2's deadline nor a bound of its own, expiring during the drain, changes
 it to `REQUEST_TIMEOUT`.

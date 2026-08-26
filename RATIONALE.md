@@ -458,6 +458,25 @@ A server's own drain bound survives as a MAY. It never carried the termination
 guarantee, and what it does carry is a server's freedom to stop draining early,
 which §7 concedes in F4 and cannot test for.
 
+**Why `REQUEST_TIMEOUT` is the one rejection with no drain behind it.** That
+follows from the rule rather than being chosen, and it is worth stating because
+it looks like an omission. Every other early rejection is settled while the
+deadline still runs, so a drain is owed and the remaining budget pays for it.
+The timeout path is settled *by* the deadline expiring, so the budget is spent
+and the earliest terminator is met before the response goes out.
+
+The client is not left without an answer. A response already written sits in the
+peer's receive queue and survives the close, so what a slow client loses is only
+the `EPIPE` it would have been spared. Spending a second deadline to spare it
+would give the one peer that already used a whole deadline another, which is the
+exchange with the least claim to it.
+
+Go arrives at the right behaviour by accident here, because a fired deadline
+latches the direction and its drain call reads nothing. The seventh round
+reported that as a defect, and under the rule it is not one.
+`IMPLEMENTATION.md` says so, because an implementer reading only the Go
+behaviour would reset the deadline and reintroduce the double-holding.
+
 **Why nothing is allocated from a wire value before it is checked.** Every
 length and count in a message is a number a peer chose. Sizing anything from one
 before bounding it against the structure that contains it is where a
