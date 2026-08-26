@@ -1047,19 +1047,29 @@ connection all produce a short message, and only a sender that declared a length
 it did not fill is at fault. Those causes are far more common than the bug, so
 `REQUEST_INCOMPLETE` exists to keep the common case pointed at the deployment.
 
-The same reasoning puts a field above its §3.1 maximum under `REQUEST_TOO_LARGE`
-rather than `REQUEST_MALFORMED`. The realistic instance is a `credential` from a
-backend that issues large ones, a Kerberos ticket carrying a big PAC being the
-usual case, where the client passed through exactly what its host handed it.
-Nothing about that is an encoder defect, and reporting it as one sends an
-operator hunting a codec fault that is not there. A 40000-octet `user` really is
-a client bug, since PostgreSQL's `NAMEDATALEN` is 64, but splitting the status
-by which field failed is a rule nobody would remember.
+A field above its §3.1 maximum is `REQUEST_MALFORMED` all the same, and it did
+not always read that way. The entry here used to argue the opposite, that the
+realistic instance is a large `credential` a client passed through exactly as
+its host handed it, so calling it an encoder defect sends an operator hunting a
+codec fault that is not there. Round five removed the premise: §3.1 now has a
+client asked to send an over-long field report `INVALID_REQUEST` to its host
+without opening a connection. A server that receives one therefore has a peer
+that sent what §3.1 forbids, which is a sender defect like any other, and §5
+already said as much. The passage was one round five did not sweep.
 
-The same reasoning gives `REQUEST_TOO_LARGE` its own code. A hundred-kilobyte
-declared length is well-formed framing that happens to exceed a limit, and
-telling the sender its bytes are broken sends it looking for a fault in its
-encoder.
+**Why `REQUEST_TOO_LARGE` is the envelope only.** Its value is that a receiver
+reaches it from the declared length alone and answers without parsing further.
+A field maximum cannot be checked that way: the receiver has already accepted
+the envelope and read the body, so nothing is saved and nothing distinguishes
+the failure from any other the body carries. Keeping the status to the envelope
+makes it mean one thing, and the field case keeps its diagnosis in
+`error_detail`, which is more use to an operator than a second status would be.
+
+A separate `REQUEST_FIELD_TOO_LARGE` was weighed and not added. Both would map
+to the same PAM code and neither would change what an operator does, so it would
+buy a name and no behaviour. The limits are far above any expected value, so a
+field over one is more likely a client bug than a legitimately large token, and
+a client that sent it ignored a rule it could have checked itself.
 
 **Why `REQUEST_UNSUPPORTED` covers an unrecognised `service`.** A client naming
 a service the server has never heard of is a configuration mismatch between the
@@ -1668,6 +1678,16 @@ It used to give it the names too, by having a client report the status the
 server would have sent. That was wrong in one direction: a caller reading
 `REQUEST_TOO_LARGE` could not tell whether to shorten its own credential or to
 go and look at the server.
+
+**Why `RESPONSE_TOO_LARGE` exists and the other conditions fold into
+`RESPONSE_MALFORMED`.** The client-local names shadow §5's statuses, and the
+shadow had one hole: nothing paired with a response declaring a length above
+`MAX_LENGTH`, so §7 asserted a pairing it did not supply, twice. Folding it into
+`RESPONSE_MALFORMED` was the free repair and was declined, because the two
+conditions differ in what a client had to do to find them. A client reports
+`RESPONSE_TOO_LARGE` off the envelope, having parsed nothing, which is the same
+line §5 draws on the server's side. Everything a client finds inside the body,
+an over-long field included, is `RESPONSE_MALFORMED`.
 
 ## Appendix A: derived message maxima
 

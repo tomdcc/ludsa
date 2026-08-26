@@ -311,7 +311,7 @@ it does not recognise in any case.
 
 A receiver MUST reject a field above its maximum, except that §5 governs a
 client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
-`REQUEST_TOO_LARGE`; §7 says what a client reports. A sender MUST NOT emit a
+`REQUEST_MALFORMED`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
 asked to send one reports the condition §7 names `INVALID_REQUEST` to its host
 application, without opening a connection.
@@ -556,10 +556,9 @@ Steps 10 to 13 are not detectable early. A required field is missing only once
 the message ends, and the selectors, limits and decision need the whole message,
 so a receiver reaches them only after the declared octets arrive.
 
-Step 8 precedes step 9 because they yield different statuses. A field that is
-both over its maximum and holds a NUL is `REQUEST_TOO_LARGE`, and checking its
-length first also spares a receiver from scanning a value it is about to
-reject.
+Steps 8 and 9 yield the same status, so the order between them is not
+observable and a receiver taking them the other way round conforms. The order
+shown spares a receiver from scanning a value it is about to reject.
 
 ### 4.1 What a later version may change
 
@@ -637,7 +636,7 @@ the server decided, because an `ERROR` message means it decided nothing.
 | 1 | `STATUS_UNKNOWN` | a status this implementation does not recognise |
 | 3 | `REQUEST_MALFORMED` | the request was structurally wrong |
 | 4 | `REQUEST_INCOMPLETE` | the request ended before it was complete |
-| 5 | `REQUEST_TOO_LARGE` | the declared length exceeded `MAX_LENGTH`, or a field exceeded its §3.1 maximum |
+| 5 | `REQUEST_TOO_LARGE` | the declared length exceeded `MAX_LENGTH` |
 | 6 | `REQUEST_UNSUPPORTED` | the message type, or a selector within it, is not implemented |
 | 7 | `VERSION_UNSUPPORTED` | `ludsa_version_major` is not implemented |
 | 8 | `REQUEST_TIMEOUT` | the request did not arrive within the server's deadline |
@@ -663,14 +662,20 @@ recognise. §7 gives a client the names for what it finds in a response.
 A client MUST NOT report a `REQUEST_` code for a fault it found itself. The
 names exist so a caller can tell the two apart. An operator reading
 `INVALID_REQUEST` (§7) shortens a credential. One reading `REQUEST_TOO_LARGE`
-has a peer that sent what §3.1 forbids it to send. One reading §7's other
+has a peer that declared a length §3 forbids it to send. One reading §7's other
 response codes goes to the server.
 
-`REQUEST_MALFORMED` means the sender produced invalid structure. A message that
-stopped early is `REQUEST_INCOMPLETE`, and one that was well-formed but
-oversized is `REQUEST_TOO_LARGE`; neither is a defect in the sender's encoder.
-`REQUEST_INCOMPLETE` covers a message that ended before its declared length, and
-one that ended before it declared a length at all.
+`REQUEST_MALFORMED` means the sender produced something §3 forbids it to send:
+invalid structure, a value its type rules reject, or a field above its §3.1
+maximum. A message that stopped early is `REQUEST_INCOMPLETE` instead, because a
+peer that crashed or was killed produced a short message with no defect in its
+encoder. `REQUEST_INCOMPLETE` covers a message that ended before its declared
+length, and one that ended before it declared a length at all.
+
+`REQUEST_TOO_LARGE` is what the envelope decides. A receiver reaches it from the
+declared length alone and answers without parsing any further, which is the
+whole of its value. A field above its §3.1 maximum is not `REQUEST_TOO_LARGE`,
+because a receiver finds one only inside a body it has already accepted.
 
 `PEERCRED_DENIED` is for a server that checks the connecting peer, which this
 document does not require. Such a server MAY answer it and MAY instead close
@@ -1134,13 +1139,13 @@ the client's counterpart is the name paired with the same condition below.
 | 18 | A STATUS `max_age` it cannot satisfy under its own limit | server | `RATE_LIMITED` | F2 |
 | 19 | The request deadline expiring, after `ludsa_version_major` has been read | server | `REQUEST_TIMEOUT` | F6 |
 | 20 | A response carrying a `msg_type` the client implements, which the request does not permit (§6) | client | `RESPONSE_MALFORMED` | |
-| 21 | A field whose value exceeds its §3.1 maximum, in an otherwise well-framed message | server | `REQUEST_TOO_LARGE` | |
+| 21 | A field whose value exceeds its §3.1 maximum, in an otherwise well-framed message | server | `REQUEST_MALFORMED` | |
 | 22 | An unimplemented `msg_type` in a message that also has a repeated tag | either | `REQUEST_UNSUPPORTED` | |
 | 23 | An unrecognised `service` in a message that also omits `credential` | server | `REQUEST_MALFORMED` | F1 |
 | 24 | A response of exactly one octet, then end of file | client | `RESPONSE_INCOMPLETE` | |
 | 25 | A response carrying a `msg_type` the client does not implement | client | `RESPONSE_UNSUPPORTED` | |
 | 26 | A tag with bit 6 set and either of bits 5-4 set, in a message whose `msg_type` the receiver does not implement | either | `REQUEST_MALFORMED` | |
-| 27 | A field both above its §3.1 maximum and containing a NUL octet | server | `REQUEST_TOO_LARGE` | |
+| 27 | A declared length above `MAX_LENGTH`, in a message whose octets also carry a NUL | either | `REQUEST_TOO_LARGE` | |
 | 28 | The connection accepted and the request read, then closed with no response octet | client | `RESPONSE_ABSENT` | |
 | 29 | The connection accepted and the request read, then held open past the client's deadline | client | `RESPONSE_TIMEOUT` | F6 |
 
@@ -1287,7 +1292,8 @@ still conforming:
 
 | name | the client found |
 |---|---|
-| `RESPONSE_MALFORMED` | the response was structurally wrong, or a `utf8` field in it was defective |
+| `RESPONSE_MALFORMED` | the response was structurally wrong, or a field in it was defective or above its §3.1 maximum |
+| `RESPONSE_TOO_LARGE` | the response declared a length above `MAX_LENGTH` |
 | `RESPONSE_UNSUPPORTED` | the response carried a `msg_type` the client does not implement |
 | `RESPONSE_INCOMPLETE` | a response started and stopped part-way, at end of file or at the client's deadline |
 | `RESPONSE_ABSENT` | no response octet arrived, and the server closed |
@@ -1422,6 +1428,7 @@ The response codes §7 gives a client:
 | response code | PAM code |
 |---|---|
 | `RESPONSE_MALFORMED` | `PAM_SYSTEM_ERR` |
+| `RESPONSE_TOO_LARGE` | `PAM_SYSTEM_ERR` |
 | `RESPONSE_UNSUPPORTED` | `PAM_SYSTEM_ERR` |
 | `RESPONSE_INCOMPLETE` | `PAM_AUTHINFO_UNAVAIL` |
 | `RESPONSE_ABSENT` | `PAM_AUTHINFO_UNAVAIL` |

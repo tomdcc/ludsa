@@ -765,13 +765,17 @@ sends someone hunting a codec bug that is not there. `VERSION_UNSUPPORTED` goes
 the other way for the same reason: no retry resolves a major version mismatch,
 and someone has to upgrade a package.
 
-Two statuses straddle the code-versus-environment reading. `REQUEST_UNSUPPORTED`
+One status straddles the code-versus-environment reading. `REQUEST_UNSUPPORTED`
 covers a message type a server does not implement and a `service` it does not
-recognise; the second is a configuration mismatch. `REQUEST_TOO_LARGE` covers an
-oversized message and a field above its §3.1 maximum; a `credential` above 16384
-octets may be a token a client passed through exactly as it was given. Both stay
-`PAM_SYSTEM_ERR`, because a retry improves neither and both need someone to
-look. Which one it was lives in `error_detail`.
+recognise; the second is a configuration mismatch. It stays `PAM_SYSTEM_ERR`,
+because a retry improves neither and both need someone to look. Which one it was
+lives in `error_detail`.
+
+`REQUEST_MALFORMED` covers a field above its §3.1 maximum as well as a defect in
+the framing, and `error_detail` is again what separates them. A `credential`
+above 16384 octets is the instance to expect, and §3.1 has a client refuse to
+send one rather than let a server discover it, so a server seeing one is looking
+at a client that skipped a check it owed.
 
 **The `account` line is a requirement the appendix places on a client, and
 `pam_ludsa` has to document it.** An authorisation outcome returns
