@@ -694,7 +694,7 @@ the server decided, because an `ERROR` message means it decided nothing.
 | 8 | `REQUEST_TIMEOUT` | the request did not arrive within the server's deadline |
 | 9 | `UNAVAILABLE` | no verdict, and waiting may change that: a dependency that did not answer and may answer later |
 | 10 | `INTERNAL_ERROR` | no verdict, and waiting will not change that: a fault that needs someone to look |
-| 11 | `RATE_LIMITED` | the server declined work the request would have required, under its own limit |
+| 11 | `RATE_LIMITED` | the server declined under a limit of its own: the work a request would have required, or the connection carrying it |
 | 12 | `PEERCRED_DENIED` | the server declined the connection on the peer's credentials |
 
 This enumeration has no affirmative case at all, so §3.4 leaves both 0 and 2
@@ -745,6 +745,13 @@ than it looks, because a uid is not freely chosen: an attacker must already be
 running as one to try it, where a user name can be guessed without limit. A
 server unwilling to disclose even that makes the check before it reads a
 version, which is the point at which saying nothing is still open to it.
+
+`RATE_LIMITED` has two producers and they sit at opposite ends of an exchange.
+§6.3 has a server decline a check that `max_age` would have forced, which is
+work a request asked for. §2 has a server decline at its concurrency bound,
+which is reached at accept before any octet has arrived, so nothing has asked
+for anything yet. What they share is the only thing a client acts on: the server
+had capacity for this and has none now, so a later attempt may fare better.
 
 `REQUEST_TIMEOUT` describes the arrival of the request, not the time spent
 reaching a verdict. A server that bounds a dependency call reports `UNAVAILABLE`

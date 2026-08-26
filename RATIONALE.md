@@ -98,6 +98,15 @@ absorb it is a legitimate resource choice, the client's own deadline bounds the
 wait either way, and a server knows its own constraints better than this
 document does.
 
+**Why `RATE_LIMITED` covers both a declined check and a declined connection.**
+§5 used to define it as work a request would have required, which describes
+§6.3's producer and not §2's: the concurrency limit is reached at accept, so
+nothing has asked for anything. Two statuses was the alternative and buys
+nothing. Both map to the same PAM code, both mean wait and try again, and no
+client branches on which limit it met. What a client needs from the name is that
+capacity ran out and a later attempt may fare better, and that is true at either
+end.
+
 **Why the retry rule states a property rather than a list.** An enumeration goes
 stale against conditions the protocol itself produces. §2 advises a server at
 its limit to stop accepting and leave connections in the kernel backlog, and a
@@ -1293,7 +1302,11 @@ something that will still be broken.
 connecting peer had nowhere to put the outcome. §2 obliges it to answer once it
 holds `ludsa_version_major`, and none of the other statuses fits: the request
 was not at fault, the server's own state was not at fault, and `RATE_LIMITED`
-means work declined under a limit. So the check had to happen at accept, where
+says a later attempt may fare better, which is never true of a refusal on
+identity. This entry used to separate the two by saying `RATE_LIMITED` was about
+declined work, which stopped being the line when the seventh round widened it to
+cover a declined connection. Retry value is the durable distinction and was
+always the operative one. So the check had to happen at accept, where
 closing without replying is what §2 prescribes anyway, and the diagnosis was
 lost.
 
