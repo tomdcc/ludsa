@@ -1447,11 +1447,13 @@ exchange, and §2's check on octets beyond the declared length is a SHOULD it
 need not make exhaustive.
 
 It SHOULD reject the following. A conforming receiver may accept or reject it,
-so it carries no expected outcome:
+so it carries no expected outcome. The *against* and status columns mean what
+they mean in the numbered table, so a client detects the same condition and
+reports the name paired with it below:
 
-| case | status |
-|---|---|
-| Octets beyond the declared length, where observed | `REQUEST_MALFORMED` |
+| case | against | status |
+|---|---|---|
+| Octets beyond the declared length, where observed | either | `REQUEST_MALFORMED` |
 
 A defect in `error_detail`, `server_desc` or `authn_id` is a server bug (§5),
 and a client SHOULD report it rather than work around it. Tolerance is
