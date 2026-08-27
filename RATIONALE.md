@@ -1345,8 +1345,16 @@ its verdict before any octet of a body is parsed, so that is what it answers. A
 server whose rules govern which peers may reach which `service` values cannot
 decide before it has read one. A request too malformed to yield a `service`
 never lets it decide at all, so the framing status is the only answer it has.
-Each server has one lawful answer rather than a choice between two, and the
-choice was the divergence.
+
+That removes most of the choice rather than all of it, which is the right
+amount. Where a server reaches both verdicts together it may answer either, and
+nothing
+turns on which the client hears: a peer that is neither permitted nor speaking a
+version this server implements is misconfigured twice, and both answers send
+someone to look at a configuration file. What the rule removes is the case that
+had no reason behind it, where one verdict was available well before the other
+and the server answered the later one because of where its check happened to
+sit.
 
 The three positions survive because each buys something. Accept is the cheapest
 and the only one at which saying nothing is still open, so a server unwilling to

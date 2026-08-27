@@ -763,11 +763,14 @@ A server with no such rules SHOULD answer after the version word, or after a
 bounded interval waiting for one, that being the earliest point at which it can
 answer in the client's own version.
 
-A server refusing a peer this late may also hold a status from §4's order. It
-answers whichever it reached first, which is what answering at the earliest
-permitted point amounts to. A request too malformed to yield the `service` its
-rules turn on settles that by itself: the peer check cannot complete, and the
-framing status is the only answer the server has.
+A server may hold both a peer refusal and a status from §4's order. Where one
+was available earlier, answering at the earliest permitted point means answering
+that one. Where both arrive together, either conforms: a peer that is not
+permitted and whose `ludsa_version_major` this server does not implement is
+misconfigured twice over, and this document does not choose which half it hears
+about. A request too malformed to yield the `service` a server's rules turn on
+settles the question by itself, since the peer check cannot complete and the
+framing status is the only answer it has.
 
 It discloses that the peer was refused and why. That is a smaller disclosure
 than it looks, because a uid is not freely chosen: an attacker must already be
