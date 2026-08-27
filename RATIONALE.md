@@ -1161,11 +1161,23 @@ out of a message it had misdispatched turned the commonest rejection into an
 approval. Before that round it had read as a denial and failed closed.
 
 Leaving 2 empty in the one enumeration with no affirmative case restores it and
-states it as an invariant rather than an accident: no value assigned in one
-enumeration is affirmative in another. The cost is one number of 255 in a
-namespace this sparsely used. §6.4 already spends numbering on the same
-hazard, so a receiver that misdispatches meets two defences rather than one, and
-neither is the `msg_type` check that should have caught it first.
+states it as an invariant rather than an accident: no value that names a
+non-affirmative outcome in one enumeration is affirmative in another. The cost
+is one number of 255 in a namespace this sparsely used. §6.4 already spends
+numbering on the same hazard, so a receiver that misdispatches meets two
+defences rather than one, and neither is the `msg_type` check that should have
+caught it first.
+
+**The invariant was stated too widely for two rounds.** It read "no value
+assigned in one enumeration is affirmative in another", which is false: 2 is
+assigned in `result` and affirmative in `serving`, and the reverse. The
+consequence drawn from it survives, since no refusal anywhere sits at 2 and 2 is
+the only affirmative number, so a misdispatched refusal still cannot read as an
+approval. What does not survive is the claim's reach. Two affirmatives share the
+number, so a `serving` of 2 read as a `result` is `OK`, and what stops that is
+`serving` and `result` holding different required tags rather than anything in
+§3.4. The eighth round found it; `IMPLEMENTATION.md` had been stating the narrow
+version correctly all along, which is why nothing was built on the wide one.
 
 **Why two enumerations rather than one.** A status says how the server handled
 the message. A result says what it decided. One enumeration would make every

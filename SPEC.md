@@ -490,11 +490,17 @@ A sender MUST NOT emit 0 or 1. A receiver that meets either, or any other value
 it does not recognise, MUST treat it as 1, and MUST NOT treat it as an
 affirmative outcome.
 
-**No value assigned in one enumeration is affirmative in another.** Holding the
-affirmative outcome at 2 everywhere, and leaving 2 unassigned in an enumeration
-that has none, is what secures that. A receiver that reads an enumerated value
-out of the wrong message type therefore cannot turn a refusal into an approval,
-whatever else it gets wrong.
+**No value that names a non-affirmative outcome in one enumeration is
+affirmative in another.** Holding the affirmative outcome at 2 everywhere, and
+leaving 2 unassigned in an enumeration that has none, is what secures that. A
+receiver that reads an enumerated value out of the wrong message type therefore
+cannot turn a refusal into an approval, whatever else it gets wrong.
+
+Two enumerations do both put an affirmative outcome at 2, `result`'s `OK` and
+`serving`'s `SERVING`, so this section does not keep a health check from reading
+as a grant. §6.4's tags do: `result` is `0x0281` and `serving` is `0x0381`, both
+required, so a receiver meeting the wrong one aborts under §3.3 rather than
+reading a value out of it.
 
 **Zero is never affirmative**, and the rule reaches past this section. A field
 number of 0 names no field (§3.3). `msg_type` `0x00` is `ERROR` (§5), which
