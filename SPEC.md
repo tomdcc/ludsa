@@ -1367,6 +1367,10 @@ document does not specify. A driver MUST be given all of them:
   a client needs it, including one marked `either`. None of those names crosses
   the socket and a client using its own is conforming, so a driver can infer
   neither the names nor the channel from anything the wire carries.
+- **F8**: a route by which a driver hands the client under test a value above a
+  §3.1 maximum, through the client's own host interface. For a PAM client that
+  is a conversation supplying an oversized token. A client whose host cannot
+  present one cannot run the case below and is not non-conforming for that.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1454,6 +1458,20 @@ connection and writes nothing:
 This is the only case that turns on who owns the socket rather than on the
 octets crossing it, so a driver needs two uids where every other case needs a
 byte string.
+
+One further case observes a client that never connects at all, which §3.1's
+prohibition reaches and no message can. The driver listens, and hands the client
+a value its own maximum forbids:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A value above its §3.1 maximum, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F7, F8 |
+
+The report is what ends the case, so no deadline is needed: a client that
+connected before reporting has already failed it. §3.1 states the other half of
+that sentence in the indicative rather than as a MUST, so the name is a
+client-local one under this section's usual terms and the prohibition on
+connecting is what binds.
 
 One further case observes what a client does after it writes, which §2 requires
 of every client and no status reports. The driver accepts a connection, reads

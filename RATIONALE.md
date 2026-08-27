@@ -1947,6 +1947,22 @@ Recording is not rejecting, the same split the undefined-tag check draws. As a
 receiver the driver does what §5 asks of any client. As a harness it reports the
 peer as non-conforming, and those are different acts on the same octets.
 
+**Why the over-long value gets a fixture of a new kind.** F1 to F6 are facts
+about a peer's configuration and F7 is a channel a driver reads. F8 is the first
+that hands something *to* the client under test, through the interface its host
+uses rather than through the socket, and that is what the rule needs: §3.1
+forbids a client to open a connection for a value it may not send, so the only
+way to reach it is to give the client such a value.
+
+It is affordable because the client-side harness already does it. The PAM
+measurement that settled how a token reaches the module is a conversation with a
+chosen token, so an oversized one is the same mechanism with a different value.
+
+The report ends the case rather than a deadline. A driver waiting to prove a
+negative would have to decide how long a connection that is never coming takes
+not to arrive; waiting for the client to report instead makes the assertion
+exact, since a client that connected before reporting has already failed.
+
 **Why some cases name a fixture.** An unrecognised `service` needs the driver to
 know a name the peer under test recognises and one it does not, and neither is
 derivable from this document. Rate limiting is worse: §6.3 makes it a MAY, so a
