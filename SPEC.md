@@ -345,8 +345,8 @@ A receiver MUST reject a field above its maximum, except that §5 governs a
 client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
 `REQUEST_MALFORMED`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
-asked to send one reports the condition §7 names `INVALID_REQUEST` to its host
-application, without opening a connection.
+asked to send one MUST NOT open a connection to send it, and reports the
+condition §7 names `INVALID_REQUEST` to its host application.
 
 `error_detail`, `server_desc` and `authn_id` are the only fields in this table
 that a server sends and a client receives. A defect in any field a server sends

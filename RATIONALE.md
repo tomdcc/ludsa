@@ -259,6 +259,21 @@ An earlier round ruled the same thing and the ruling never reached the
 specification, which is how the gap survived a rename that would have
 contradicted it.
 
+**Why one half of that sentence is a MUST NOT and the other is not.** It said a
+client "reports the condition §7 names `INVALID_REQUEST` to its host
+application, without opening a connection", in the indicative, next to two
+prohibitions. The eighth round read the whole thing as an obligation nothing
+tests, and the halves are not alike.
+
+Not opening a connection is about the socket, which is what this document
+governs, and it is the half a driver could observe. It is a MUST NOT.
+
+Reporting to the host application is a rule about a client's dealings with its
+own caller, over a value the protocol never delivered, since the host handed it
+in. Objection 5 declines to legislate that, five times over, and promoting this
+sentence to a MUST would have taken the boundary down by a side door. It stays
+in the indicative, which is what it always was and now visibly on purpose.
+
 **Why a client's own deadline is `RESPONSE_TIMEOUT`.** It had two candidate
 statuses and §5 supported both readings. The rename settled half of it:
 `REQUEST_TIMEOUT` is the server's request deadline and a client cannot report
