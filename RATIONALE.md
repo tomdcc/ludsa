@@ -1447,17 +1447,35 @@ that matters is a PAM module, and the line-oriented log call it has is
 `pam_syslog`, which is `printf`-shaped. Nothing in the banned set excludes `%`,
 because `%` is not a control character.
 
-The seventh round raised this as a format-string bug and it is worth stating in
-the normative text rather than only in guidance, because the misreading comes
-from the normative sentence. The rule is stated without naming a language: the
-value is data, and a receiver may not use it as a format string, a template, or
-anything else that interprets its content. That covers `printf`, a `%`-format in
-Python, and the log4j class of defect in one sentence.
+The seventh round raised this as a format-string bug and answered it twice: the
+guarantee stopped over-promising, and a MUST was added forbidding a receiver to
+use the value as a format string, a template, or anything else that interprets
+its content.
 
-The consequence is not symmetric with the server's logging hazard. A forged log
+**The eighth round took the MUST back out.** A rule about what a receiver hands
+a value to is not observable on the wire, no conformance case can reach it, and
+it is a property of untrusted input in general rather than of these fields.
+Naming three fields carries the worse implication that the rest are safe, and
+the rest are the ones a remote party chooses outright: `user` is entirely under
+its control, and a server logging it faces the same class of hazard with no
+rule beside it. HTTP does not tell an implementer that a response header is not
+a format string, and nor should this.
+
+What survives is the half that caused the trouble. The guarantee says what it
+covers, the octets, and says it is not a statement about what a receiver may
+hand them to. The misreading came from the promise, so the promise is where the
+correction belongs. Everything else went to `IMPLEMENTATION.md`, which already
+carried the wrong and right `pam_syslog` calls, under a general statement that
+every value off the socket is attacker-influenced at the point of use whatever
+guarantee its field carries.
+
+The consequence is still not symmetric with the server's logging hazard, which
+is why the guidance is emphatic where the specification is silent. A forged log
 line misleads whoever reads it. A format string in a module loaded into an
 `sshd` running as root, where the server may be an unprivileged sidecar, turns a
-compromised server into code execution.
+compromised server into code execution. Of the three, `authn_id` reaches
+furthest: `error_detail` arrives only in an `ERROR`, and the identity is logged
+when everything went right.
 
 **What was declined with it.** The same round proposed banning U+2028, U+2029
 and the bidirectional overrides. Neither earns a place in the banned set. U+2028

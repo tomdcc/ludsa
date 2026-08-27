@@ -811,12 +811,11 @@ condition and not the octets: "exceeds 16384 octets".
 
 It MUST NOT contain a control character, meaning U+0000 to U+001F, U+007F, and
 U+0080 to U+009F, so that a receiver may write it as a datum to a line-oriented
-log without escaping it. The guarantee is about the value's content, not about
-what a receiver may pass it to: it is data, and a receiver MUST NOT use it as a
-format string, a template, or anything else that interprets what it contains. A
-server that embeds text from elsewhere in it MUST render that text safely
-first, and MUST NOT let that text push the field above its §3.1 maximum. It
-shortens what it embeds, not the message. §3.1's rule against truncating a
+log without escaping it. That is a statement about the octets and about nothing
+else. It says the value needs no escaping; it does not say what a receiver may
+hand it to. A server that embeds text from elsewhere in it MUST render that text
+safely first, and MUST NOT let that text push the field above its §3.1 maximum.
+It shortens what it embeds, not the message. §3.1's rule against truncating a
 value binds a receiver rejecting one, not a server describing one.
 
 A client MUST NOT log `error_detail`, return it, or otherwise act on it until it

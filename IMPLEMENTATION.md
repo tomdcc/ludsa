@@ -759,6 +759,18 @@ check, which is the log-injection vector, is safe on raw bytes.
 
 ## Logging received values
 
+**Everything that arrives on the socket is a peer's choice.** The protocol
+bounds what a peer may legally send and says nothing about why it sent it, so a
+conforming value can still be hostile. That is plain for `user`, which §6.2
+marks as entirely the remote party's. It holds for `error_detail` too, which a
+server wrote but may have built out of something a remote party gave it.
+
+Treat every received value as attacker-influenced at the point of use, whatever
+guarantee its field carries. A guarantee about a value's content is not a
+guarantee about what the value may safely be passed to. The specification does
+not enumerate the second, and this document does. The two sections below are the
+instances that have bitten.
+
 §3.3 forbids rejecting control characters or invalid UTF-8 in `user`, `ruser`,
 `tty` and `rhost`, and §6.2 marks `user` as entirely under the remote party's
 control. The server is the side with a logger and the side receiving those
@@ -796,10 +808,15 @@ pam_syslog(pamh, LOG_ERR, error_detail);        /* wrong */
 pam_syslog(pamh, LOG_ERR, "%s", error_detail);  /* right */
 ```
 
-`%` is not a control character and is valid UTF-8, so §5's guarantee does not
-exclude it, and §5 says so: the value is safe as a datum and a receiver must not
-use it as a format string. §5 also has a server embed text from elsewhere in the
+`%` is neither a control character nor invalid UTF-8, so §5's guarantee does not
+exclude it. That guarantee covers the octets and not what a receiver hands them
+to. §5 also has a server embed text from elsewhere in the
 field, so the `%` need not come from a hostile server to arrive.
+
+The same holds for `server_desc` and `authn_id`, and `authn_id` is the one that
+reaches furthest. `error_detail` arrives only in an `ERROR` message, so the
+exposed call is on a failure path. `pam_ludsa` logs the resolved identity, so
+`authn_id` is logged when everything went right.
 
 The consequence is not the same as the server's. `pam_ludsa` is loaded into an
 `sshd` running as root. The server may be an unprivileged sidecar. So a format
