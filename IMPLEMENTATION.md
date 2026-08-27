@@ -612,6 +612,22 @@ pointer or an explicit presence flag, and have the encoder emit on presence
 rather than on non-emptiness. The same applies to `max_age`, where absent and
 zero are opposite instructions in the other direction.
 
+**`SERVICE_UNSUPPORTED` is one protocol name at two numbers**, `result` 7 and
+`serving` 4: one condition, answered in whichever enumeration the response type
+carries. §3.4 fixes numbers and not names, since the number is what travels, so
+a language that scopes constants inside their type has nothing to do. Go gets
+`ResultServiceUnsupported` and `ServingServiceUnsupported` and the question does
+not arise.
+
+**C has one namespace for enumeration constants, so qualify by enumeration.**
+The compiler stops a second declaration, so the trap is not two constants but
+one: `result` 4 is `AUTHN_DENIED_POLICY`, which Appendix B answers with
+`PAM_SUCCESS` at `pam_sm_authenticate`, so a single constant taken from the
+`serving` table and compared against a `result` matches the appendix's one
+fail-open cell while reading as "the configured `service` is wrong". Declare
+`LUDSA_RESULT_SERVICE_UNSUPPORTED` and `LUDSA_SERVING_SERVICE_UNSUPPORTED` and
+neither aliases the other.
+
 **A field absent from the wire decodes as zero, and §3.4 is what makes that
 safe.** §5 has an `ERROR` message carry no field but `status` and
 `error_detail`, so a `result` decoded from one was never sent. Its zero value is
