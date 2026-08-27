@@ -1358,8 +1358,14 @@ can reach:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential valid for one identity, sent with a `user` that identity may not act as | server | an `AUTHENTICATE_RESPONSE` whose `result` is not `OK` | F3 |
-| A credential the peer accepts, sent with a `user` of zero octets | server | an `AUTHENTICATE_RESPONSE` whose `result` is not `OK` | F3 |
+| A credential valid for one identity, sent with a `user` that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+| A credential the peer accepts, sent with a `user` of zero octets, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+
+Both halves of the expectation carry weight. An `AUTHENTICATE_REQUEST` requires
+a `service`, so a driver must choose one, and a `service` the server does not
+hold obliges it to answer `SERVICE_UNSUPPORTED` (§6.2.1), which is not `OK` and
+is not a decision either. A peer holding no services would otherwise pass the
+only test of §6.2's binding rule without examining a credential.
 
 Further cases exercise the selector, which is neither a rejection nor a
 decision. Each drives the same condition into the enumeration its response type

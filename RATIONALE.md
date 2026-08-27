@@ -1955,6 +1955,19 @@ two different names, and the case earns its marking. The expected answer flipped
 afterwards, when the repeat check moved behind `msg_type`, but the case still
 turns on which of the two a receiver reaches first.
 
+**Why the decision cases name a recognised `service`.** They expected a `result`
+that was not `OK`, which was exact until `SERVICE_UNSUPPORTED` became a `result`
+in the seventh round. An `AUTHENTICATE_REQUEST` requires a `service`, so a
+driver must choose one, and nothing on those rows said which. Choosing one the
+peer does not hold obliges it to answer `SERVICE_UNSUPPORTED`, which is not `OK`
+and is not a decision, so both rows passed while nothing was tested. A
+`ludsa-mockd` configured with no services at all certified against the only test
+of §6.2's binding rule without ever examining a credential.
+
+Naming the `AUTHN_DENIED` codes rather than "not `OK`" is what closes it, and
+naming them by their prefix rather than by their numbers is what keeps it closed
+if a later version adds one.
+
 **Why the empty `user` case needs the fixture to say so.** An absent `user` asks
 the server not to decide. It does not bind the exchange to an empty or null
 name: the client may not care who the identity is, or may be applying its own
