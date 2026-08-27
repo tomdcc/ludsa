@@ -1914,6 +1914,24 @@ a response permits. Some cases therefore have no constructible input in one
 direction, and a table written as a server's obligation asks a driver to send
 what it cannot build.
 
+**Why a driver checks content and not only encoding.** §7 is built around cases,
+an input driven at a peer with an outcome expected of it, and a sender's
+obligations do not fit that shape: no request makes a server emit a reserved
+enumeration value or a control character in a field it promised was clean. It
+does that because it has a bug.
+
+The eighth round pointed out that not being able to provoke a breach is no
+reason not to notice one. The three checks cost a comparison each, over octets a
+driver already holds, on responses the suite already collects. Without them a
+server that renders an attacker-controlled `user` into `error_detail` unescaped
+ships a forged log line to every client it serves and the suite stays green,
+which is the exact hazard `IMPLEMENTATION.md` spends a section on from the
+server's own side.
+
+Recording is not rejecting, the same split the undefined-tag check draws. As a
+receiver the driver does what §5 asks of any client. As a harness it reports the
+peer as non-conforming, and those are different acts on the same octets.
+
 **Why some cases name a fixture.** An unrecognised `service` needs the driver to
 know a name the peer under test recognises and one it does not, and neither is
 derivable from this document. Rate limiting is worse: §6.3 makes it a MAY, so a

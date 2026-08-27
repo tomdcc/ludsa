@@ -1422,9 +1422,18 @@ a `ludsa_version_minor` the driver implements, it also records a tag that
 version does not define for that message type, which is the sender breaking
 §3.2. It records rather than rejects: whether to reject is a receiver's own
 choice (§4), and against a higher minor version the check cannot be made at all,
-since the driver does not hold the schema that would settle it. One further case
-pins what no other input reaches, since a server's own version word is not
-something a request can provoke:
+since the driver does not hold the schema that would settle it.
+
+It checks their content on the same terms, over every field it recognises: no
+enumerated value of 0 or 1 (§3.4), no `utf8` value carrying a control character
+or an invalid encoding (§5), and no value above its §3.1 maximum. Each of those
+binds a sender and no input provokes a breach, so a driver records one wherever
+a run happens to produce it rather than in a case of its own. That is separate
+from what it does as a receiver, where §5 has it report the response as
+malformed.
+
+One further case pins what no other input reaches, since a server's own version
+word is not something a request can provoke:
 
 | case | against | expected | needs |
 |---|---|---|---|
