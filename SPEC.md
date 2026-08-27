@@ -292,8 +292,18 @@ The status it sends is the one it had determined when it rejected the message.
 Neither §2's deadline nor a bound of its own, expiring during the drain, changes
 it to `REQUEST_TIMEOUT`.
 
-A server answering `VERSION_UNSUPPORTED` has read no length it may rely on, so
-the declared-length terminator does not apply to it and the rest do.
+A length a server may rely on is one it read under a major version it
+implements, and which passed §4's step 2: within `MAX_LENGTH` and not below the
+minimum for the version. Where it has none, the declared-length terminator does
+not apply and the rest do.
+
+A server answering `VERSION_UNSUPPORTED` has none, since §3 puts everything
+after the version word inside the major version the message declares, so it
+knows neither the length nor whether there is one. A server answering
+`REQUEST_TOO_LARGE`, or `REQUEST_MALFORMED` for a length below the minimum, has
+none either: the number failed the one check that would have made it worth
+acting on, and a server that honoured it would close on a peer still writing,
+which is what the drain exists to avoid.
 
 **A client or server MUST NOT allocate storage from any length or count read
 from a message before checking it against the extent of the structure that

@@ -237,6 +237,15 @@ unauthenticated CPU burn reachable without authenticating.
 The response goes out before the drain starts, so a client blocked in `read`
 gets its answer without waiting for the drain to finish.
 
+**The sketch above never consults the declared length, and that is fine.** §3
+stops the drain at the earliest of its terminators, and the declared length is
+one of them only where the server may rely on it, which it may not on the two
+paths where the length itself was the fault. On the paths where it may, draining
+past it costs a little time under a deadline that is already running and reads
+octets a conforming peer never sent. Consulting it is an optimisation, not an
+obligation to code around, and the version of the loop that ignores it drains at
+least as long, which is the direction that matters.
+
 **What the drain is for.** It keeps a client that is still writing a large
 `credential` from taking `EPIPE` before it gets round to reading. On `AF_UNIX` a
 response already written sits in the peer's receive queue and survives the

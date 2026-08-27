@@ -446,8 +446,21 @@ same, though, and a driver can probe it: write again after the response arrives,
 and a draining server consumes it while a closed one gives `EPIPE`.
 
 `VERSION_UNSUPPORTED` is the exchange to do it in. §3 already puts the declared
-length out of play there, so the case tests the drain rather than an argument
-about which length a server may rely on. The driver is a version 1
+length out of play there, so the case tests the drain rather than which length a
+server may rely on.
+
+**Why that phrase now has a definition.** It governed a terminator and appeared
+three times unexplained, with one worked instance. The eighth round asked the
+question it could not answer: is a length that failed the bounds check one a
+server may rely on? A client declaring 3 octets and then writing four kilobytes
+draws a three-octet discard and a close from one server and a full drain from
+another, and the first leaves a peer taking `EPIPE` mid-write, which is the one
+thing the drain exists to prevent.
+
+So a length is worth acting on where the server read it under a major version it
+implements and where it passed the bounds check. A number that failed that check
+is the sender's own fault reported back as a fact, and honouring it turns the
+drain against its purpose. The driver is a version 1
 implementation claiming a later major version, so the answer comes back in a
 version it can parse.
 
