@@ -688,31 +688,39 @@ The rule binds a sender to its own version rather than to 1.0, which is what
 lets a later version emit at all, and §5's `ERROR` sentence became an instance
 of it rather than the only statement of it.
 
-**Why a receiver enforces none of it.** The author asked, on the day the rule
-went in, whether a receiver that knows the sending version should reject a tag
-that version does not define. It should not, and §4 now says so, because the
-question is one any reader of the new bullet will reach.
+**What a receiver may do about a breach.** The question arrived the day the rule
+went in: should a receiver that knows the sending version reject a tag that
+version does not define? The first answer was no, on three grounds, and it was
+too tight. The rule now says a receiver MAY reject where it implements the
+declared version, and MUST skip where it does not.
 
-A receiver could apply such a check only against a version it already
-implements, so it would police older peers and leave newer ones alone, which is
-the wrong way round: the newer implementation is the one more likely to be right
-about what it is doing. The check buys nothing at the time either, since the tag
-is skipped whether or not it is legal, and it costs a great deal when a peer has
-a small encoder fault, because every authentication then fails rather than
-succeeding with a skipped tag.
+The three grounds, and what happened to them. *A receiver could apply the check
+only against a version it already implements, so it polices some peers and not
+others.* That is a statement about coverage rather than about correctness. A
+check that fires where it can be sure and declines where it cannot is ordinary,
+and the case it declines is exactly the case where the receiver has no schema to
+judge with. *It turns a skipped tag into a failed authentication.* Under a MAY
+it does so only where a deployment chose that, and forbidding a deployment to be
+strict about input in an authentication path is a strange thing for this
+protocol to do. *It makes `ludsa_version_minor` load-bearing for parsing.* It
+does not. Parsing is still by tag: the version settles whether the sender had
+any business emitting the tag, not what the tag means or how to read it.
 
-It would also make `ludsa_version_minor` load-bearing for parsing, which §4
-refuses everywhere else: the value is for logs, it must not inform a decision,
-and there is no negotiation for it to be half of. A protocol whose parse depends
-on a field a peer might get wrong has made a log annotation into a schema
-selector.
+What the MAY does not touch is the case that matters for evolution. A receiver
+meeting a minor version it does not implement MUST skip, because §4.1 leaves a
+later version free to define any tag not yet assigned, so a receiver rejecting
+there would fail a conforming peer. That is the whole of skip-unknown's job and
+it is untouched.
 
-The same answer settles the other direction, which is the sharper one. A peer
-implementing a later version may receive a message declaring an earlier one that
-carries a tag the later version defines. It recognises that tag, so §3.3 has it
-read the field, from a sender whose declared version should not have sent it.
-Parsing by tag rather than by declared version answers both without a second
-rule.
+Neither outcome is preferred, so §7 excludes it as a case rather than choosing,
+on the same ground as a message both truncated and faulty: the protocol has no
+stake in the answer and the input comes only from a sender that is already
+broken.
+
+The other direction needs no rule of its own. A peer implementing a later
+version may receive a message declaring an earlier one that carries a tag the
+later version defines. It recognises the tag, so §3.3 has it read the field.
+Parsing by tag answers that without a second rule.
 
 **Why absence and emptiness are different.** An earlier wording told an emitter
 never to send a field empty, which conflated *I have no value for this* with *my

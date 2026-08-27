@@ -372,9 +372,10 @@ no version defines. A receiver skips one, so nothing breaks today; what breaks
 is later, when a minor version assigns that tag and a peer implementing it reads
 the padding as the field.
 
-It is a sender's rule alone. §4 has a receiver parse by tag rather than by the
-version a message declares, so a receiver neither checks this nor may reject
-for it.
+It binds a sender. What a receiver does about a breach is §4's: it MAY reject
+where the message declares a minor version it implements, and MUST skip where it
+does not, since only the first leaves it holding the schema that settles the
+question.
 
 A value of zero octets is a value, not an absent field. Whether one is
 acceptable is a decision for the receiving application, not for this protocol.
@@ -440,7 +441,8 @@ For a tag it does not recognise:
 - **Required**: it MUST abort the exchange and return `REQUEST_MALFORMED`.
 - **Optional**: where the tag passed the shape checks above, it MUST skip the
   field without error, using bit 6 and, when clear, bits 5–4 to know how many
-  octets to skip.
+  octets to skip. §4 gives it one alternative, where the message declares a
+  minor version it implements.
 
 A receiver skips every occurrence of an unrecognised optional tag, including one
 equal to a tag it has already skipped. Whether a repeat is legal is a property
@@ -545,13 +547,21 @@ parse it under the rules of §3.3. A higher minor version can only add fields
 that are safe to skip.
 
 **A receiver parses by tag and not by the declared version.** It skips a tag it
-does not recognise and reads one it does, whatever version the message declares,
-and MUST NOT reject a message because the version it declares does not define a
-tag it carries. §3.2's rule against emitting such a tag binds a sender and gives
-a receiver nothing to enforce. A receiver could enforce it only against a
-version it already implements, which is to say against older peers and not newer
-ones, and it would turn a tag that is skipped today into a failed
-authentication.
+does not recognise and reads one it does, and the version a message declares
+never selects the schema it parses under.
+
+That value settles one thing. Where a message declares a minor version the
+receiver implements, and carries a tag that version does not define for that
+message type, the sender has broken §3.2 and the receiver holds the schema that
+proves it. It MAY reject the message as `REQUEST_MALFORMED`, and it MAY skip the
+tag as §3.3 has it skip any other. Neither is preferred and both conform, so a
+deployment that wants strict input in an authentication path may have it and one
+that wants tolerance may have that.
+
+Where the declared minor version is one the receiver does not implement, it MUST
+skip. It holds no schema that would settle whether the tag is legitimate, and
+§4.1 leaves a later version free to define it, so a receiver rejecting there
+would fail a conforming peer.
 
 The minor version is for logs, and a server MAY tailor what it sends to the one
 a request declares (§3). It MUST NOT inform an authentication decision, and it
@@ -717,8 +727,10 @@ has a peer that declared a length §3 forbids it to send. One reading §7's othe
 response codes goes to the server.
 
 `REQUEST_MALFORMED` means the sender produced something §3 forbids it to send:
-invalid structure, a value its type rules reject, or a field above its §3.1
-maximum. A message that stopped early is `REQUEST_INCOMPLETE` instead, because a
+invalid structure, a value its type rules reject, a field above its §3.1
+maximum, or a tag its declared version does not define, which §4 leaves a
+receiver free to reject or to skip. A message that stopped early is
+`REQUEST_INCOMPLETE` instead, because a
 peer that crashed or was killed produced a short message with no defect in its
 encoder. `REQUEST_INCOMPLETE` covers a message that ended before its declared
 length, and one that ended before it declared a length at all.
@@ -1279,6 +1291,10 @@ A message both truncated and faulty in the octets that arrived may draw either
 status (§4). Both conform, so it is not a case here and a driver MUST NOT record
 either as a failure.
 
+A message declaring a minor version the receiver implements, carrying a tag that
+version does not define, may draw `REQUEST_MALFORMED` or be accepted with the
+tag skipped (§4). Both conform, so it is not a case here either.
+
 Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
 
@@ -1351,9 +1367,12 @@ there is no end of file, and an envelope plus a kilobyte is far below
 `2 x MAX_LENGTH`.
 
 A driver checks the encoding of every response it receives: tags in ascending
-order, each recognised tag appearing at most once, and no tag the message type
-does not define (§3.2). The last is what a peer emitting padding fails, and it
-holds for every message type rather than for `ERROR` alone. One further case
+order, and each recognised tag appearing at most once. Where a response declares
+a `ludsa_version_minor` the driver implements, it also records a tag that
+version does not define for that message type, which is the sender breaking
+§3.2. It records rather than rejects: whether to reject is a receiver's own
+choice (§4), and against a higher minor version the check cannot be made at all,
+since the driver does not hold the schema that would settle it. One further case
 pins what no other input reaches, since a server's own version word is not
 something a request can provoke:
 
@@ -1419,11 +1438,13 @@ prohibition: a client MUST NOT report a `REQUEST_` code for any of them.
 
 A receiver MUST accept a message whose `ludsa_version_minor` differs from its
 own, in either direction, and MUST skip an unrecognised **optional** tag without
-error, including one that appears more than once. It MUST do both whatever
-version the message declares, including one it implements, since §4 has it parse
-by tag rather than by that value. It MUST accept a message whose
-declared length is exactly the minimum for the version, which a `PING_REQUEST`
-carrying no fields is, and a field whose value is exactly its §3.1 maximum. It
+error, including one that appears more than once. The skipping obligation is
+absolute only for a minor version the receiver does not implement; §4 lets it
+reject instead where it holds the schema that proves the tag illegitimate.
+
+A receiver MUST accept a message whose declared length is exactly the minimum
+for the version, which a `PING_REQUEST` carrying no fields is, and a field whose
+value is exactly its §3.1 maximum. It
 MUST report an enumerated value it does not recognise as that enumeration's 1
 (§3.4) and MUST NOT report it as an affirmative outcome, so a `result` of 200 is
 `AUTHN_UNKNOWN` and never `OK`, and so is a `result` of 0.
