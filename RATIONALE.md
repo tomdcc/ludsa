@@ -1013,31 +1013,32 @@ ordering arrival strictly first would make it defer every verdict to the end of
 the message. §3 is built the other way: its drain protocol exists for nothing
 but rejecting before the message has arrived, it requires the response to be
 written before the drain begins, and a client's fixed receive buffer depends on
-the same freedom.
+the same freedom. So a message both truncated and faulty in the octets that
+arrived takes either status, and §7 excludes it as a case rather than choosing
+one, on the same footing as a request that stalls before its version word.
 
-**Which left one case with two answers, and the seventh round closed it.** A
-message both truncated and faulty in the octets that arrived used to take either
-status, and §7 excluded it as a case rather than choosing one, on the same
-footing as a request that stalls before its version word. The two are not on the
-same footing. A request that stalls before its version word leaves a server with
-nothing to answer in, so both outcomes are forced by what it holds. This one is
-not forced by anything: whether the receiver has scanned as far as the fault
-when the message ends is a question about how a socket read happened to split,
-so the same implementation answers `REQUEST_MALFORMED` on one run and
-`REQUEST_INCOMPLETE` on the next.
+**The seventh round chose one and the eighth put it back.** The case for
+choosing was that the two statuses reach different PAM codes, so one stack falls
+through where another stops on identical octets. What that left out is that a
+rule in either direction conscripts a way of reading a socket. Making the fault
+win obliges a receiver that reads a message whole to parse a prefix it has
+already given up on. Making the truncation win obliges a receiver that validates
+as it reads to wait for the rest of a message it has already judged. The
+protocol has no stake in which of those a receiver is, and every reason not to
+choose for it.
 
-That would be tolerable if the two statuses meant the same thing downstream.
-They do not, deliberately. `REQUEST_MALFORMED` sends an operator to file a bug
-and `REQUEST_INCOMPLETE` sends them to the deployment, and Appendix B keys a
-PAM code on the difference, so one stack falls through where the other
-hard-fails on identical octets.
+The stakes are also smaller than they looked. The input needs a peer broken
+twice over, since one that merely died mid-write leaves a valid prefix and no
+fault at all, and a peer that died is not reading the response whichever status
+it gets. A hostile peer gains nothing either, since it can already pick between
+the two by sending a clean short message or a complete bad one.
 
-So a detected fault outranks the truncation. Early rejection is untouched, since
-a receiver that finds a fault still reports it without waiting. What the rule
-adds falls on a receiver that buffers: when the message ends short it examines
-what it holds before answering, which is running the parser it already has over
-a shorter buffer. The status becomes a property of the octets rather than of the
-read pattern, and §7 gains a case where it used to have an exclusion.
+The round-seven entry claimed as well that the status varied between runs of one
+implementation, on where a socket read split. It does not. A receiver that
+validates as it reads reaches a fault before the end of file every time, and one
+that reads first parses nothing either time. Each is deterministic on its own;
+the divergence is between the two strategies, which is exactly what makes
+conscripting one of them the whole cost of the rule.
 
 The fifth round paired arrival with framing alone, which left the message type
 as the one place a receiver holds a settled verdict and may not report it. A

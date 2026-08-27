@@ -589,20 +589,19 @@ request to compare against.
 
 Step 3 is the only step that requires waiting. Every other check runs on octets
 already read, so a receiver MAY report a fault it has already detected without
-waiting for the declared length to arrive.
+waiting for the declared length to arrive. A message that is both truncated and
+faulty in the octets that arrived may therefore take either status, and both
+conform. A message truncated with no fault in the octets that arrived is
+`REQUEST_INCOMPLETE`.
 
-**A fault in the octets that arrived outranks the truncation.** Where a message
-ends before its declared length and the octets that did arrive carry a fault,
-the receiver reports that fault. `REQUEST_INCOMPLETE` is for a message truncated
-with no fault in what arrived. A receiver that has not yet examined the octets
-it holds when the message ends examines them before it answers.
-
-That last sentence is the whole cost of the rule, and it falls on a receiver
-that buffers rather than one that validates as it reads. Without it the status
-depends on where a socket read happened to split: the same implementation
-answers `REQUEST_MALFORMED` when it had scanned past the fault and
-`REQUEST_INCOMPLETE` when it had not, and §5 sends those to operators with
-different jobs to do. The rule makes the status a property of the octets.
+**Neither of those is forced, deliberately.** Forcing the fault would oblige a
+receiver that reads a message whole to parse a prefix it has already given up
+on. Forcing the truncation would oblige a receiver that validates as it reads to
+wait for the rest of a message it has already judged. Each rule conscripts one
+of the two ways of reading a socket, and nothing this protocol governs turns on
+the answer: a peer that sends a message both short and faulty is broken twice
+over, and one that stopped because it died is not reading the response whichever
+status it gets.
 
 Steps 10 to 13 are not detectable early. A required field is missing only once
 the message ends, and the selectors, limits and decision need the whole message,
@@ -1257,12 +1256,13 @@ the client's counterpart is the name paired with the same condition below.
 | 27 | A declared length above `MAX_LENGTH`, in a message whose octets also carry a NUL | either | `REQUEST_TOO_LARGE` | |
 | 28 | The connection accepted and the request read, then closed with no response octet | client | `RESPONSE_ABSENT` | |
 | 29 | The connection accepted and the request read, then held open past the client's deadline | client | `RESPONSE_TIMEOUT` | F6 |
-| 30 | A message ending before its declared length, whose arrived octets carry a tag lower than the tag before it | either | `REQUEST_MALFORMED` | |
 
-Case 17 is retired. It drove an unrecognised `service`, which §6.2.1 and §6.3
-now answer with `SERVICE_UNSUPPORTED` rather than a rejection. Its number is not
-reused, on the ground §4.1 gives for a field number: a citation that outlives
-what it named should fail to resolve rather than resolve to something else.
+Cases 17 and 30 are retired. 17 drove an unrecognised `service`, which §6.2.1
+and §6.3 now answer with `SERVICE_UNSUPPORTED` rather than a rejection. 30 drove
+a truncated message whose arrived octets carried a fault, which §4 leaves to the
+receiver. Neither number is reused, on the ground §4.1 gives for a field number:
+a citation that outlives what it named should fail to resolve rather than
+resolve to something else.
 
 Every version 1.0 `utf8` field is one a client may reject for its content. §5
 makes a defect in `error_detail`, `server_desc` or `authn_id` a fault in the
@@ -1275,8 +1275,9 @@ Both conform, so it is not a case here and a driver MUST NOT record either as a
 failure. Case 24 is its counterpart on the other side, where one octet is a
 report rather than a silence.
 
-A message both truncated and faulty in the octets that arrived takes the fault's
-status, not `REQUEST_INCOMPLETE` (§4). Case 30 drives it.
+A message both truncated and faulty in the octets that arrived may draw either
+status (§4). Both conform, so it is not a case here and a driver MUST NOT record
+either as a failure.
 
 Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:

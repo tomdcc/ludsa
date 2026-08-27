@@ -85,19 +85,12 @@ io.EOF from any later read                REQUEST_INCOMPLETE (§7 case 15)
 io.ErrUnexpectedEOF from any later read   REQUEST_INCOMPLETE
 ```
 
-**Neither row is the whole answer, and this is the trap.** §4 has a fault in the
-octets that arrived outrank the truncation, so a short read is
-`REQUEST_INCOMPLETE` only where what arrived is clean. Run the parser over the
-prefix before answering either row. It is the same parser, on a shorter buffer,
-and the reflex is to skip it because the message is already known to be
-unusable.
-
-Answering off the error alone makes the status depend on where the read split.
-A server that had already scanned past the fault when the message ended answers
-`REQUEST_MALFORMED`, and the same binary answers `REQUEST_INCOMPLETE` when the
-kernel handed it everything at once. Appendix B sends those to different PAM
-codes, so the stack behaves differently on identical octets and neither run
-reproduces the other. §7 case 30 fails a server that skips the prefix scan.
+**Either row is a complete answer for a reader shaped like this one.** A server
+that reads the declared octets and then parses reports the truncation, and §4
+lets it. One that validates as it reads may instead answer a fault it found in
+the prefix, and §4 lets that too. Neither owes the other's answer, so there is
+nothing to reconcile: do not add a parse of the prefix here to chase a status
+the specification does not ask for.
 
 **Read the version word on its own, not the whole envelope.** A server that
 takes the envelope in one 8-octet `io.ReadFull` gets `io.ErrUnexpectedEOF` from
