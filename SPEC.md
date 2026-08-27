@@ -591,6 +591,11 @@ check takes the status of the earliest:
 12. limits, such as `max_age`
 13. the decision
 
+The peer check §5 describes is not one of these steps. It concerns the
+connection rather than the message, and §5 has a server answer a refusal at the
+earliest point it can, which for a server whose refusal does not turn on the
+request is before any of this order has run.
+
 Step 4 checks only what a receiver can check without knowing which schema
 applies. A tag equal to the tag before it is a repeat, which step 7 judges
 against the schema. Steps 7 to 10 need the schema that `msg_type` selects, and
@@ -741,15 +746,28 @@ whole of its value. A field above its §3.1 maximum is not `REQUEST_TOO_LARGE`,
 because a receiver finds one only inside a body it has already accepted.
 
 `PEERCRED_DENIED` is for a server that checks the connecting peer, which this
-document does not require. This document does not say when the check happens
-either: a server MAY make it at accept, after reading `ludsa_version_major`, or
-after reading the whole request. What that choice settles is whether the server
-still owes an answer, and §2 settles it rather than this section.
+document does not require. **A server that refuses a peer SHOULD answer at the
+earliest point it is permitted to answer**, and where it makes the check is what
+decides that point:
 
-Where the server has read `ludsa_version_major`, §2 binds it: it MUST answer,
-and `PEERCRED_DENIED` is the status for this refusal. Where it has not, §2 lets
-it close without replying, or answer in its own major version after allowing the
-client a bounded interval to supply one.
+- **At accept.** It has no version from the client, so §2 lets it answer in its
+  own major version at once, or close without replying.
+- **After reading `ludsa_version_major`.** It answers in the version the client
+  chose. §2 binds it from that point: it MUST answer, and `PEERCRED_DENIED` is
+  the status for this refusal.
+- **After reading the request**, where the refusal depends on what the request
+  says. A server whose rules govern which peers may reach which `service`
+  values cannot decide before it has read one.
+
+A server with no such rules SHOULD answer after the version word, or after a
+bounded interval waiting for one, that being the earliest point at which it can
+answer in the client's own version.
+
+A server refusing a peer this late may also hold a status from §4's order. It
+answers whichever it reached first, which is what answering at the earliest
+permitted point amounts to. A request too malformed to yield the `service` its
+rules turn on settles that by itself: the peer check cannot complete, and the
+framing status is the only answer the server has.
 
 It discloses that the peer was refused and why. That is a smaller disclosure
 than it looks, because a uid is not freely chosen: an attacker must already be

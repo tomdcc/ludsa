@@ -942,15 +942,28 @@ Nothing binds a server. Filesystem permissions are the access control the
 protocol relies on. A server that checks anyway is worth the trouble in most
 deployments, and §5 gives it a status to report the refusal with.
 
-**Where the check goes is now a choice rather than a constraint, and it decides
-what the server owes.** At accept, a server has nothing to answer in and closes
-without replying, which costs it the diagnosis and leaks nothing. After reading
-`ludsa_version_major` it MUST answer, and `PEERCRED_DENIED` is what it answers
-with: that reaches the client's logs and points an operator at the allowlist.
+**Where the check goes decides what the server owes, and §5 asks it to answer as
+early as it may.** At accept, a server has nothing from the client to answer in:
+it may answer in its own major version, or close without replying, which costs
+it the diagnosis and leaks nothing. After reading `ludsa_version_major` it MUST
+answer, and `PEERCRED_DENIED` is what it answers with: that reaches the client's
+logs in the client's own version and points an operator at the allowlist.
 Appendix B maps it to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode
 draws, so the stack falls through and the log carries the diagnosis. Before the
 status existed the first was the only conforming option, because §2 obliges a
 server to answer once it holds a version and §5 had nothing that fit.
+
+**Check at the version word unless a rule of yours needs the request.** That is
+§5's recommendation and it is the earliest point that yields a reply in the
+client's version. Deferring past it is for a server whose peer rules turn on
+`service`, and it has a cost: such a server meeting a request too malformed to
+yield a `service` cannot complete the check at all, and answers the framing
+status instead.
+
+**Do not defer it to compare process ids.** Reading `SO_PEERCRED` at accept and
+keeping it costs nothing, so the uid check runs early and the pid comparison
+below runs later against the same stored value. The comparison needs the
+request; the allowlist check does not.
 
 **Reading the version word and then closing in silence is not conforming.** It
 is the shape a peercred check acquires by accident: read the envelope, decide

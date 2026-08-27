@@ -1324,23 +1324,43 @@ chosen. An attacker must already be running as one to try it, where a user name
 can be guessed without limit, so the enumeration that makes
 `AUTHN_DENIED_USER_UNKNOWN` optional has little purchase here.
 
-**Why the section says nothing about when the check happens.** It used to say
-the check completes before a message arrives, so a server that answers has no
-version from the client and §2's rule for answering without one covers it. That
-was an assertion about implementations rather than a rule, and it was not true
-of the deployment `IMPLEMENTATION.md` recommends: a server that checks after
-reading `ludsa_version_major` is the only one whose refusal reaches the client's
-log at all. Beside it sat an unconditional permission to close without replying,
-which §2 forbids from the moment the version word is read.
+**Why the section says when a server answers rather than when it checks.** It
+used to say the check completes before a message arrives, so a server that
+answers has no version from the client. That was an assertion about
+implementations rather than a rule, and it was not true of the deployment
+`IMPLEMENTATION.md` recommends: a server that checks after reading
+`ludsa_version_major` is the only one whose refusal reaches the client's log at
+all. Beside it sat an unconditional permission to close without replying, which
+§2 forbids from the moment the version word is read.
 
-So the timing is a server's choice and §2 already governs what follows from it.
-Read a version and you owe an answer, for this refusal as for every other.
-Refuse before reading one and closing in silence stays open. That makes where
-the check goes the same decision as how discreet to be, which is a better place
-for it than a sentence in §5 asserting where implementations put it.
+The seventh round replaced that with silence: three positions, all permitted,
+nothing said about choosing between them. The eighth round found what the
+silence cost. A peer that is both unauthorised and sending a faulty request has
+two true things a server could report, and which one it reports came down to
+where the implementer happened to put the check.
 
-A server that wants to say nothing therefore checks early. Nothing is lost: the
-peer learns only that the connection closed, which is what it learned before.
+So the rule is about answering rather than about checking: as early as this
+document permits. A server whose refusal does not depend on the request holds
+its verdict before any octet of a body is parsed, so that is what it answers. A
+server whose rules govern which peers may reach which `service` values cannot
+decide before it has read one. A request too malformed to yield a `service`
+never lets it decide at all, so the framing status is the only answer it has.
+Each server has one lawful answer rather than a choice between two, and the
+choice was the divergence.
+
+The three positions survive because each buys something. Accept is the cheapest
+and the only one at which saying nothing is still open, so a server unwilling to
+disclose the refusal checks there. The version word is the earliest point at
+which an answer can go back in the version the client chose, which is why it is
+the recommendation for a server with nothing else to wait for. Reading the
+request is what a per-`service` peer rule requires, and that rule is a real
+deployment rather than a hypothetical.
+
+An earlier draft of this entry justified the third position by saying it lets a
+server compare the process id the kernel attests against the one the request
+claims. That is wrong. The kernel's credentials are readable at accept and can
+be kept, so a server may check the user id immediately and compare process ids
+later; the comparison needs the request and the allowlist check does not.
 
 The name puts the subject first, where the result codes in §6.2.1 put the verb
 first. That is deliberate. `PEERCRED_DENIED` is a status in §5 and refuses a
