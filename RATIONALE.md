@@ -1564,27 +1564,42 @@ credential, sees `authn_id`, and generalises, and a server that fills the field
 from its upstream and omits it on a cache hit is conforming. The failure is
 fail-closed but intermittent, and it presents as a server fault.
 
-**The rule named a mechanism for two rounds, and the mechanism was not the
-property.** It asked the cached and derived paths to match the live one, on the
-reasoning that the degraded path is what actually varies and that naming it
-leaves a server free to route two services to backends that genuinely differ.
-The seventh round showed that reasoning does not hold up. It was offered against
-blanket consistency, but one of the two proposals it rejected was consistency
-*within* a `service`, which leaves the routing freedom untouched by
-construction. So the justification distinguished the shipped rule from one
-proposal and not from the other.
+**The rule named a mechanism for two rounds, then was generalised too far.** It
+asked the cached and derived paths to match the live one. The seventh round
+found the justification for that scoping did not distinguish it from the
+per-`service` proposal it had rejected, and replaced it with a property: within
+one `service`, the same optional fields on every response, whatever path and
+whatever declared minor version.
 
-By then a second route had opened as well. §3 gained a permission for a server
-to tailor a response to the request's `ludsa_version_minor`, which is a further
-way for the same response to vary and one a deployment check run at a single
-minor version cannot see.
+**The eighth round broke that property twice, in ways neither reviewer saw the
+other find.** It could not be obeyed: an AUTHENTICATE response carries one
+optional field, the identity the server resolved, and a server that denied for a
+bad credential resolved none, so every server populating it on `OK` broke the
+rule on its first denial. And it contradicted §3, which lets a server carry
+information in a field an older client understands, keyed on the declared minor
+version, since that is exactly a change to which optional fields are carried.
 
-Two routes covered by one sentence and a third by none is the shape of a rule
-written at the wrong altitude. The SHOULD now states the property: within one
-`service`, the same optional fields, whatever path and whatever declared minor
-version. The cross-`service` freedom is stated rather than implied, and §3's
-tailoring is bounded to substitution so it cannot drop a field at all. A fourth
-route needs no fourth sentence.
+**The minor-version clause was the author of both, and it was protecting
+nothing.** It went in because the seventh round counted three routes by which a
+response's fields could vary and closed all three. That count was wrong. A
+deployment's client sits at one minor version and meets the same substitution on
+every exchange, so its check is stable whatever a server does across versions.
+The clause closed a route that was never open, at the price of forbidding a
+permission §3 grants.
+
+So the comparison is between answers alike: within one `service`, the same
+optional fields on every AUTHENTICATE response carrying the same `result`. That
+is satisfiable, because a denial and an `OK` are no longer being compared, and
+it is what the arrangement actually needs, since a client that omits `user`
+depends on the identity when the answer is `OK` and grants nothing when it is
+not. Scoping it to the AUTHENTICATE response also keeps out the message types
+that were never at stake: an `ERROR` is a response, and no `service` is known
+when a message is rejected early.
+
+The narrower form is close to what a reviewer proposed a round earlier, to
+populate the identity on every `OK` or on none. Generalising it to every
+optional field on every response is what broke it, and the lesson is the
+generalising rather than the rule.
 
 **Why `service` is safe to route on.** It derives from the `pamservice=` option
 on the matched `pg_hba.conf` line, which the remote party cannot influence. This

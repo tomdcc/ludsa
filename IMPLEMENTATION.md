@@ -886,13 +886,19 @@ server that omits `authn_id` can only fail, and failing every authentication for
 a configuration mismatch is worth catching before it is load-bearing.
 
 That check is worth only as much as the server's consistency, which is why §6.2
-asks a server to carry the same optional fields on every response within one
-`service`. A server that populates `authn_id` from its upstream and omits it on
-a cache hit passes the check and fails later, on the path the check never took.
-The cache is the usual instance and not the only one: a server that varies the
-field by the request's `ludsa_version_minor`, or by which `service` it was sent,
-defeats the same check just as completely, and only the first of those is a
-thing §6.2 permits.
+asks a server to carry the same optional fields on every AUTHENTICATE response
+within one `service` that carries the same `result`. A server that populates
+`authn_id` from its upstream and omits it on a cache hit passes the check and
+fails later, on the path the check never took. The cache is the usual instance
+and not the only one: any second route to the same `OK` that drops the field
+defeats the check just as completely.
+
+**Do not read that as a rule to keep the field set constant across answers.** A
+denial resolved no identity and has none to send, so a denial carrying no
+`authn_id` is the field meaning what it says. Emitting a zero-length `authn_id`
+on a denial to keep the shape uniform is the mistake here: §3.2 makes a
+zero-octet value a value rather than an absence, so it says the server resolved
+an identity of no octets.
 
 `pam_ludsa` always sends `user`, because PAM always has one: it is the account
 being authenticated, and there is no version of the module's job that does not

@@ -1005,16 +1005,24 @@ against a server that supplies `authn_id`. That is an arrangement between a
 client and a deployment, not something the protocol settles.
 
 Within one `service`, a server SHOULD carry the same optional fields on every
-response it sends, whatever path it took to the answer and whatever
-`ludsa_version_minor` the request declared. Answering from a cache or from a
-result derived mechanically rather than by consulting a live service is the
-mechanism to watch, and it is not the only one. A deployment sees one exchange
-and generalises from it, so a field that appears on the path a check took and
-not on the path it did not is what leaves the arrangement above unverifiable.
+AUTHENTICATE response it sends with the same `result`, whatever path it took to
+that answer. Answering from a cache or from a result derived mechanically rather
+than by consulting a live service is the mechanism to watch, and it is not the
+only one. A deployment sees one exchange and generalises from it, so a field
+that appears on the path a check took and not on the path it did not is what
+leaves the arrangement above unverifiable.
+
+The comparison is between answers alike, which is what makes it satisfiable. A
+server that resolved no identity has none to send, so a denial carrying no
+`authn_id` where an `OK` carries one is the field meaning what it says rather
+than a server varying its answers.
 
 This says nothing across `service` values. Two of them may route to backends
 that genuinely differ, and a server that resolves an identity for one and not
-the other is answering honestly.
+the other is answering honestly. Nor does it reach §3's permission to carry
+information in a field an older client understands: that varies which field
+holds a value and not what the value says, and a client sits at one minor
+version, so it meets the same substitution every time.
 
 `authn_id` MUST NOT contain a control character, on the terms §5 sets for
 `error_detail`.
