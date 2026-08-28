@@ -190,7 +190,9 @@ message resident.
 **A small buffer does not license rejecting a larger message.** §3 requires
 accepting any declared length up to `MAX_LENGTH`, so a client sized at 527 has
 to cope with a response longer than that rather than answering
-`REQUEST_TOO_LARGE`. Read and discard what the buffer does not hold, and do not
+`RESPONSE_TOO_LARGE`, which §7 reserves for a declared length above
+`MAX_LENGTH` and not for one above the buffer. Read and discard what the buffer
+does not hold, and do not
 interpret anything past the declared length. §3's constraint is on what a
 receiver interprets, not on holding a message whole.
 
@@ -229,7 +231,13 @@ peer has half-closed, which is the normal case under §2, and that is the
 condition that ends the drain rather than an error. The subtraction is part of
 the rule: §3 counts the bound from the whole connection, "counting the envelope
 and everything already read before it rejected", so a bare `2*MaxLength`
-overshoots by whatever the server had consumed before it gave up. A hand-rolled
+overshoots by whatever the server had consumed before it gave up.
+
+Count what came off the socket rather than what the parser consumed. A server
+that read the request through a `bufio.Reader` has octets sitting in userspace
+that the parser never saw, and the section below on octets beyond the declared
+length is about exactly those. Leaving them out of `alreadyRead` makes the
+subtraction too small and the drain runs past the bound §3 sets. A hand-rolled
 `for { n, err := conn.Read(b) ... }` that does not treat `n == 0 && err ==
 io.EOF` as terminal spins at full CPU until the deadline, which is a remote
 unauthenticated CPU burn reachable without authenticating.

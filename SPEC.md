@@ -145,17 +145,17 @@ subject to:
 A client that never establishes a connection it is willing to use reports
 `CONNECTION_FAILED` (§7). That covers a permission failure, a path that is not
 there, a retryable reason that had not resolved by the client's deadline, and a
-peer whose identity is not the one the client was configured to expect. It is
-the one outcome a client reports without an exchange to report on, so no
-`RESPONSE_` name fits: a response cannot be absent from a request that was never
-sent.
+peer whose identity is not the one the client was configured to expect. No
+`RESPONSE_` name fits it, because a response cannot be absent from a request
+that was never sent. §3.1's `INVALID_REQUEST` is the other name a client reports
+with no exchange behind it, for input it may not put on the wire at all.
 
 **A client may be configured with the server identity it expects**, as a user
 name or a uid. Where it is, the client MUST confirm the peer's identity before
 it writes. It MUST close the connection where it cannot, without issuing a
 request, and report the condition §7 names `CONNECTION_FAILED`.
 
-Not confirming covers two cases: a peer that is someone else, and a peer the
+Not confirming covers a peer that is someone else and a peer the
 client could not identify. A deployment that asks for a check its platform
 cannot perform therefore fails rather than proceeds.
 
@@ -427,11 +427,12 @@ the tag, and whether the tag is required or optional:
 - bit 6 disagrees with whether the tag's assigned type is fixed or dynamic;
 - the field number is zero.
 
-The first and third read only bits every tag carries, so they reach a tag whose
-type is unassigned like any other. The second cannot: nothing states whether an
-unassigned type is fixed or dynamic, so a tag carrying one that passes the other
-two is unrecognised rather than malformed, which is what keeps §4.1's promise
-about a new value in the type table.
+The checks on bits 5-4 and on the field number read only bits every tag
+carries, so they reach a tag whose type is unassigned like any other. The check
+against the assigned type cannot: nothing states whether an unassigned type is
+fixed or dynamic, so a tag carrying one that passes the others is unrecognised
+rather than malformed, which is what keeps §4.1's promise about a new value in
+the type table.
 
 A tag that cannot describe a field is not a field to skip, and skipping one
 would mean trusting a width the tag itself contradicts. Field number 0 is
@@ -589,7 +590,7 @@ The protocol has no negotiation. Each side declares its own version, and §3.3
 makes a minor difference safe without either side agreeing to anything.
 
 **Validation proceeds outermost first**, and a message failing more than one
-check takes the status of the earliest:
+check takes the outcome of the earliest:
 
 1. `ludsa_version_major` implemented
 2. declared length within `MAX_LENGTH` and not below the minimum
@@ -794,7 +795,7 @@ running as one to try it, where a user name can be guessed without limit. A
 server unwilling to disclose even that makes the check before it reads a
 version, which is the point at which saying nothing is still open to it.
 
-`RATE_LIMITED` has two producers and they sit at opposite ends of an exchange.
+`RATE_LIMITED` has a producer at each end of an exchange.
 §6.3 has a server decline a check that `max_age` would have forced, which is
 work a request asked for. §2 has a server decline at its concurrency bound,
 which is reached at accept before any octet has arrived, so nothing has asked
@@ -1114,8 +1115,11 @@ decision belongs to exactly one of them. `AUTHN_DENIED_POLICY` is an
 authorisation outcome: its meaning is that the credential was valid and policy
 denied it anyway. Every other non-`OK` code is a credential outcome,
 `AUTHN_DENIED` included, because a client told nothing MUST NOT conclude that
-the credential was good. `SERVICE_UNSUPPORTED` is not a decision, and a client
-fails both steps on it.
+the credential was good. `AUTHN_UNKNOWN` is not a server's decision at all but
+what §3.4 has a receiver substitute for a value it does not recognise, and it
+lands on the credential side for the same reason: a client that cannot read the
+answer has not been told the credential was good. `SERVICE_UNSUPPORTED` is not a
+decision either, and a client fails both steps on it.
 
 Nothing here obliges a server to check a credential before it answers.
 `AUTHN_DENIED_USER_UNKNOWN` in particular does not imply that the credential was
@@ -1441,7 +1445,7 @@ word is not something a request can provoke:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| Any request carrying a `ludsa_version_minor` other than the server's own, which a `PING_RESPONSE` envelope reports (§6.1) | server | a response carrying the server's own `ludsa_version_minor`, not the one sent | |
+| Any request carrying a `ludsa_version_minor` other than the server's own, which every response envelope reports (§3) | server | a response carrying the server's own `ludsa_version_minor`, not the one sent | |
 
 §3.2's rule against emitting an optional field that has no value is not
 driveable. A zero-length value is a value (§3.2), so nothing distinguishes the
@@ -1456,8 +1460,7 @@ connection and writes nothing:
 | A connection accepted by a peer whose identity is not the one the client was configured to expect | client | the client writes no octet and reports `CONNECTION_FAILED` | F5 |
 
 This is the only case that turns on who owns the socket rather than on the
-octets crossing it, so a driver needs two uids where every other case needs a
-byte string.
+octets crossing it, so a driver needs two uids for it and for nothing else.
 
 One further case observes a client that never connects at all, which §3.1's
 prohibition reaches and no message can. The driver listens, and hands the client
