@@ -346,7 +346,11 @@ client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
 `REQUEST_MALFORMED`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
 asked to send one MUST NOT open a connection to send it, and reports the
-condition §7 names `INVALID_REQUEST` to its host application.
+condition §7 names `INVALID_REQUEST` to its host application. This holds whether
+the field is required or optional. A client MUST NOT omit the field and send the
+rest, because a request without it asks something other than what its host
+application asked. Dropping a field, or shortening a value, is the host
+application's decision, and it makes it with the report in hand.
 
 `error_detail`, `server_desc` and `authn_id` are the only fields in this table
 that a server sends and a client receives. A defect in any field a server sends
@@ -1421,9 +1425,10 @@ document does not specify. A driver MUST be given all of them:
   the socket and a client using its own is conforming, so a driver can infer
   neither the names nor the channel from anything the wire carries.
 - **F8**: a route by which a driver hands the client under test a value of its
-  choosing, through the client's own host interface. For a PAM client that is a
-  conversation supplying a token. A client whose host cannot present the value a
-  case names cannot run that case and is not non-conforming for that.
+  choosing, through the client's own host interface, and the fields that route
+  reaches. For a PAM client that is a conversation supplying a token. A client
+  whose host cannot present the value a case names cannot run that case and is
+  not non-conforming for that.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1517,13 +1522,14 @@ a value its own maximum forbids:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A value above its §3.1 maximum, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F7, F8 |
+| A value above the §3.1 maximum of a field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F7, F8 |
 
 The report is what ends the case, so no deadline is needed: a client that
 connected before reporting has already failed it. §3.1 states the other half of
 that sentence in the indicative rather than as a MUST, so the name is a
 client-local one under this section's usual terms and the prohibition on
-connecting is what binds.
+connecting is what binds. A client that omitted the field and sent the rest has
+failed it too, since the driver's socket then saw a connection.
 
 One further case observes the octets a client puts on the wire, which §3.2
 binds. The driver hands the client a `user` carrying leading and trailing

@@ -742,6 +742,15 @@ whitespace and reads the request off the wire. A host that hands you a name you
 cannot encode, a NUL in a `string` for instance, is `INVALID_REQUEST` and no
 connection (§3.3), never a name you repair.
 
+**An over-long optional field is the same answer, and the tempting one is
+wrong.** A 300-octet `PAM_RHOST` against a 256-octet maximum looks like a case
+for dropping the field: it is optional, it is diagnostic, and failing a login
+over it seems disproportionate. §3.1 forbids it. Dropping asks a question the
+host did not ask, and a policy that turns on `rhost` then sees a request with
+none. Report `INVALID_REQUEST` without connecting and let the caller decide
+whether to retry without the field. The judgement is the host's to make, and it
+cannot make it if your library already made it.
+
 **`ludsa-file` is where this bites twice.** `bufio.Scanner` strips the line
 terminator from the *stored* credential, and `strings.Fields` or `TrimSpace`
 strips it from the *parsed* one. Such a server agrees with itself completely and

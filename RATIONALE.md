@@ -259,6 +259,22 @@ An earlier round ruled the same thing and the ruling never reached the
 specification, which is how the gap survived a rename that would have
 contradicted it.
 
+**Why an over-long optional field is refused rather than dropped.** For four
+rounds the rule said nothing about the case, and the two readings differ by
+whether an authentication succeeds. §3.2's omit rule reaches an optional field
+that has no value, and this one has a value the client cannot legally send.
+Dropping it asks a different question: `rhost` is a host observation a policy
+may turn on, so a request without it may draw a different decision than the one
+the host application asked for.
+
+The deeper reason is layering. Truncating a value, or deciding a diagnostic
+field matters less than the login, is a judgement about what the request means,
+and the host application is where that judgement belongs. A client library that
+makes it silently has substituted its own policy for its caller's, and the
+caller cannot see that it happened. Refusing puts the choice back where it can
+be made knowingly: the client reports, and the host retries without the field if
+that is what it wants.
+
 **Why one half of that sentence is a MUST NOT and the other is not.** It said a
 client "reports the condition §7 names `INVALID_REQUEST` to its host
 application, without opening a connection", in the indicative, next to two
