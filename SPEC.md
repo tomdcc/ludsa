@@ -509,9 +509,10 @@ cannot turn a refusal into an approval, whatever else it gets wrong.
 
 Two enumerations do both put an affirmative outcome at 2, `result`'s `OK` and
 `serving`'s `SERVING`, so this section does not keep a health check from reading
-as a grant. §6.4's tags do: `result` is `0x0281` and `serving` is `0x0381`, both
-required, so a receiver meeting the wrong one aborts under §3.3 rather than
-reading a value out of it.
+as a grant, and §6.4's tags do not either: `result` and `serving` are both
+`0x0181`, each in its own schema. §6 does, by binding a client to establish
+`msg_type` before it reads any field, and §4's order rejects a response type the
+request does not permit before any field is read.
 
 **Zero is never affirmative**, and the rule reaches past this section. A field
 number of 0 names no field (§3.3). `msg_type` `0x00` is `ERROR` (§5), which
@@ -684,8 +685,9 @@ become repeatable later, which is the frozen rule above.
 A field a later version adds to a message type MUST take a number higher than
 every number already assigned in that type. That is what makes §3.3's ordering
 property hold: the field sorts after every field already defined there, so an
-encoder appends rather than inserting. Numbers are not dense within a type, and
-a gap the numbering left stays empty.
+encoder appends rather than inserting. Version 1.0 assigns every number in
+sequence, and a number a later version skips, or one a retired field left
+behind, stays empty.
 
 A required field is the only addition here a predating peer never sees. It stops
 at step 1 of §4's order, on the major version. It reaches no tag. §3.3's rule
@@ -934,8 +936,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `server_desc` | `utf8` | optional | `0x0443` |
-| `uptime_seconds` | `integer`, 8 octets | optional | `0x0530` |
+| `server_desc` | `utf8` | optional | `0x0143` |
+| `uptime_seconds` | `integer`, 8 octets | optional | `0x0230` |
 
 `server_desc` names the server implementation and its release, for example
 `ludsa-k8s v1.2.3`. The format is conventional and this document does not
@@ -1030,8 +1032,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `result` | `enum`, 1 octet | required | `0x0281` |
-| `authn_id` | `utf8` | optional | `0x0343` |
+| `result` | `enum`, 1 octet | required | `0x0181` |
+| `authn_id` | `utf8` | optional | `0x0243` |
 
 `authn_id` is the canonical identity the server resolved, for example
 `system:serviceaccount:app:web`. A client that cannot use it ignores it. A
@@ -1184,8 +1186,8 @@ Response:
 
 | field | type | | |
 |---|---|---|---|
-| `serving` | `enum`, 1 octet | required | `0x0381` |
-| `server_desc` | `utf8` | optional | `0x0443` |
+| `serving` | `enum`, 1 octet | required | `0x0181` |
+| `server_desc` | `utf8` | optional | `0x0243` |
 
 `serving` is the readiness signal:
 
@@ -1232,8 +1234,8 @@ group with its own schema.
 | `ERROR` `0x00` | `0x0181` | 1 | **yes** | 1 octet | `enum` | `status` |
 | `ERROR` `0x00` | `0x0243` | 2 | no | dynamic | `utf8` | `error_detail` |
 | `PING_REQUEST` `0x01` | | | | | | *no fields* |
-| `PING_RESPONSE` `0x02` | `0x0443` | 4 | no | dynamic | `utf8` | `server_desc` |
-| `PING_RESPONSE` `0x02` | `0x0530` | 5 | no | 8 octets | `integer` | `uptime_seconds` |
+| `PING_RESPONSE` `0x02` | `0x0143` | 1 | no | dynamic | `utf8` | `server_desc` |
+| `PING_RESPONSE` `0x02` | `0x0230` | 2 | no | 8 octets | `integer` | `uptime_seconds` |
 | `AUTHENTICATE_REQUEST` `0x03` | `0x01C2` | 1 | **yes** | dynamic | `string` | `service` |
 | `AUTHENTICATE_REQUEST` `0x03` | `0x02C4` | 2 | **yes** | dynamic | `bytes` | `credential` |
 | `AUTHENTICATE_REQUEST` `0x03` | `0x0342` | 3 | no | dynamic | `string` | `user` |
@@ -1241,25 +1243,33 @@ group with its own schema.
 | `AUTHENTICATE_REQUEST` `0x03` | `0x0542` | 5 | no | dynamic | `string` | `ruser` |
 | `AUTHENTICATE_REQUEST` `0x03` | `0x0642` | 6 | no | dynamic | `string` | `tty` |
 | `AUTHENTICATE_REQUEST` `0x03` | `0x0720` | 7 | no | 4 octets | `integer` | `pid` |
-| `AUTHENTICATE_RESPONSE` `0x04` | `0x0281` | 2 | **yes** | 1 octet | `enum` | `result` |
-| `AUTHENTICATE_RESPONSE` `0x04` | `0x0343` | 3 | no | dynamic | `utf8` | `authn_id` |
+| `AUTHENTICATE_RESPONSE` `0x04` | `0x0181` | 1 | **yes** | 1 octet | `enum` | `result` |
+| `AUTHENTICATE_RESPONSE` `0x04` | `0x0243` | 2 | no | dynamic | `utf8` | `authn_id` |
 | `STATUS_REQUEST` `0x05` | `0x0120` | 1 | no | 4 octets | `integer` | `max_age` |
 | `STATUS_REQUEST` `0x05` | `0x0242` | 2 | no | dynamic | `string` | `service` |
-| `STATUS_RESPONSE` `0x06` | `0x0381` | 3 | **yes** | 1 octet | `enum` | `serving` |
-| `STATUS_RESPONSE` `0x06` | `0x0443` | 4 | no | dynamic | `utf8` | `server_desc` |
+| `STATUS_RESPONSE` `0x06` | `0x0181` | 1 | **yes** | 1 octet | `enum` | `serving` |
+| `STATUS_RESPONSE` `0x06` | `0x0243` | 2 | no | dynamic | `utf8` | `server_desc` |
 
-One tag appears in two groups: `0x0443` is `server_desc` in `PING_RESPONSE` and
-in `STATUS_RESPONSE`, which is the same field with the same meaning. No tag
-names two different fields.
+Tags are unique within a group and not across the table. `0x0181` is `status`,
+`result` and `serving`; `0x0243` is `error_detail`, `authn_id` and
+`STATUS_RESPONSE`'s `server_desc`. `PING_RESPONSE` carries `server_desc` under
+`0x0143` because it has no required field to number ahead of it, so the same
+field has a different tag in the two response types that carry it.
 
 A tag's width and type are fixed by the field it carries, and its required bit
-by the field's role in that message type. Its field number is free, so a
-collision between two different fields is a choice rather than a consequence.
-§3.3 matches a tag against the group its `msg_type` selects, so one would be
-harmless to a conforming receiver; the numbering avoids
-it anyway, because a decoder that reads fields before it consults the type then
-finds an unrecognised optional tag and skips it, rather than reading one field's
-value as another's.
+by the field's role in that message type, so only the field number is free.
+§3.3 matches a tag against the schema its `msg_type` selects, and a receiver
+holds that schema before it reads a field: §6 binds a client to establish
+`msg_type` first, and §4's order settles the message type at step 5, before any
+tag is compared. A tag shared across schemas is therefore never offered to the
+wrong one, and §4.1 leaves a later version free to assign a tag another message
+type already uses.
+
+What keeps a value read out of the wrong schema from reading as an approval is
+§3.4 rather than the numbering, and only where the two enumerations differ over
+2: it is unassigned in `status`, so a `status` read as a `result` is never `OK`.
+Where both put an affirmative outcome at 2, as `result` and `serving` do,
+nothing below §6's `msg_type` rule separates them.
 
 Field number 0 is reserved (§3.3). Every other number here is either assigned
 above or unassigned, and none is retired. A number whose field is later removed
@@ -1535,7 +1545,7 @@ A receiver MUST skip an unrecognised optional tag whose field number equals that
 of a tag the message type does define, and read the defined field from its own
 whole tag. §3.3 matches a tag whole and never by field number. `0x0242` placed
 before `0x02C4` in an `AUTHENTICATE_REQUEST` drives this against a server, and
-`0x0243` before `0x0281` in an `AUTHENTICATE_RESPONSE` against a client.
+`0x0142` before `0x0181` in an `AUTHENTICATE_RESPONSE` against a client.
 
 **A client reports a fault to its caller.** It has no status to send: a fault it
 found in a response is not a statement about the request it sent, and a request

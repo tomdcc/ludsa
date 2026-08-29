@@ -1887,22 +1887,38 @@ required flag, the length, the type and the number separately, and the tag
 beside them either decodes to those four or the row is wrong. That is the
 property to verify when the table changes, and it is mechanical.
 
-**Why no tag names two different fields, though it safely could.** A tag is
-unique within its group and not across the table, and §3.3 matches a tag against
-the schema its `msg_type` selects, so a shared tag is never offered to the wrong
-group. Sharing one is therefore harmless to a conforming receiver.
+**Why tags are shared across groups.** A tag is unique within its group and not
+across the table, and §3.3 matches a tag against the schema its `msg_type`
+selects, so a shared tag is never offered to the wrong group. Sharing one is
+harmless to a conforming receiver.
 
-The numbering avoids it anyway, because it costs nothing. A tag's required bit,
-width and type are fixed by the field it carries; its field number is free. So
-two different fields sharing a tag is a choice, and it buys nothing while it
-costs a decoder that reads fields before consulting the type: that decoder
-reads one field's value as another's, and `authn_id` against `server_desc` would
-have put a release string where an identity belongs. Numbered apart, the same
-decoder meets an unrecognised optional tag and skips it, so the field comes out
-absent and §6.2 denies.
+Version 1.0 first numbered to avoid it anyway, and it was not free. `status`,
+`result` and `serving` share a metadata byte, and so do `error_detail`,
+`server_desc` and `authn_id`, so avoiding a shared tag meant starting
+`AUTHENTICATE_RESPONSE` at 2, `STATUS_RESPONSE` at 3 and `PING_RESPONSE` at 4,
+with unassigned numbers left behind in each. The ninth round removed them. Every
+group numbers from 1, `status`, `result` and `serving` are all `0x0181`, and
+`error_detail`, `authn_id` and `STATUS_RESPONSE`'s `server_desc` are all
+`0x0243`.
 
-`0x0443` is still `server_desc` in two response groups. That one is the same
-field with the same meaning, so there is nothing to confuse.
+**What the gaps bought.** One reader: a decoder that fills a shared struct
+before it consults `msg_type`, which §6 already forbids. For that reader the
+numbering turned a misread into a rejection. §6.4 stated the result as a flat
+invariant over the whole table, §4.1 never held later versions to it, and
+successive review rounds were spent on the difference between the two.
+
+**And it could not reach the case that matters.** `result`'s `OK` and
+`serving`'s `SERVING` are both 2, so the same reader takes a `STATUS_RESPONSE`
+for an `AUTHENTICATE_RESPONSE` and reads a health check as a grant whatever the
+tags are. §3.4 says so and hands the case to §6. Distinct tags would have
+covered that reader in the directions where a misread was already fail-closed
+and left him exposed in the one where it was not.
+
+**What stands instead.** §6's rule that a client establishes `msg_type` before
+it reads a field, §4's order settling the response type before a tag is
+compared, and §3.4 leaving 2 unassigned in `status`, so a `status` read as a
+`result` is never `OK`. The last is the only one that survives a receiver
+ignoring the other two, and the sixth round put it there for that.
 
 Field numbers are unassigned rather than reserved, because an unassigned
 required tag is already safe by construction. A peer meeting one rejects the

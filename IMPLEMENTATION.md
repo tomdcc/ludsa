@@ -601,8 +601,8 @@ optional, dynamic, `string`, field number 2, and it passes every shape check;
 `credential` in an `AUTHENTICATE_REQUEST` is `0x02C4`, also number 2. Sent in
 that order they ascend, so the framing pass accepts both, and a number-keyed
 decoder either stores the first into `credential`'s slot or rejects a message it
-should have accepted. `0x0243` before `0x0281` is the same shape against a
-client, putting `error_detail`-shaped bytes where `result` belongs.
+should have accepted. `0x0142` before `0x0181` is the same shape against a
+client, putting a dynamic `string` where the one-octet `result` belongs.
 
 No conforming peer produces this: §4.1 requires a later version's field to take
 a number higher than every number already assigned in that message type, so
@@ -668,11 +668,11 @@ neither aliases the other.
 
 **A field absent from the wire decodes as zero, and §3.4 is what makes that
 safe.** §5 has an `ERROR` message carry no field but `status` and
-`error_detail`, so a `result` decoded from one was never sent. Its zero value is
-not `OK`: §3.4 leaves 0 unassigned in every enumeration, so a receiver treats it
-as `AUTHN_UNKNOWN` and MUST NOT read it as affirmative. The same holds for
-`serving`, where a probe reading a response that carried no such field gets
-`SERVING_UNKNOWN` rather than `SERVING`.
+`error_detail`. A struct field no tag populated holds 0, and §3.4 leaves 0
+unassigned in every enumeration, so a receiver treats it as that enumeration's 1
+and MUST NOT read it as affirmative. A `result` no response carried is
+`AUTHN_UNKNOWN` and never `OK`, and a `serving` no response carried is
+`SERVING_UNKNOWN` and never `SERVING`.
 
 Do not rely on that alone. It closes the enumerations, and the shared-struct
 hazard below reaches fields it does not cover.
@@ -683,25 +683,31 @@ than filling one shared struct and branching afterwards. A shared struct is what
 makes the hazard reachable, because the field exists in it whether or not the
 message carried one.
 
-§6.4 numbers the response fields so that no tag names two different fields, and
-a decode-then-dispatch client is what that numbering protects. Such a client
-reading an `ERROR` message as an `AUTHENTICATE_RESPONSE` finds `0x0181`, which
-is not a tag `AUTHENTICATE_RESPONSE` defines. Its required bit is set, so §3.3
-has the client abort rather than skip, and it reports the response as malformed
-(§7). The numbering protects by forcing a rejection, not by leaving a field
-out.
+§6.4 numbers each group from 1, so a tag is unique within its group and not
+across the table. `status` and `result` are both `0x0181`; `error_detail` and
+`authn_id` are both `0x0243`. A decode-then-dispatch client reading an `ERROR`
+as an `AUTHENTICATE_RESPONSE` therefore finds a tag that group does define and
+reads `status` into `result`, rather than meeting an unrecognised required tag
+and aborting. The numbering does not stop it and is not there to.
 
-Had `status` and `result` shared a tag, the same client would have read a
-protocol rejection as a decision. §3.4 holds the affirmative outcome at 2 in
-every enumeration that has one and leaves 2 unassigned in `status`, which has
-none, so no status value read as a result is `OK` and the confusion misreports
-rather than granting. Unlike the absent-field hazard above, it survives a
-decoder which correctly requires the field to be present.
+§3.4 does. It holds the affirmative outcome at 2 in every enumeration that has
+one and leaves 2 unassigned in `status`, which has none, so no status value read
+as a result is `OK` and the confusion misreports rather than granting. It
+survives a decoder which correctly requires the field to be present, which the
+absent-field hazard above does not.
 
-None of which licenses skipping the `msg_type` check. §6 makes it a MUST, the
-numbering is a second line rather than the first, and `0x0443` is still
-`server_desc` in two response groups, so a client that dispatches on tag alone
-can still take a PING's release string for a STATUS one.
+**One case has neither defence, and it is the one to build against.** `serving`
+is `0x0181` in `STATUS_RESPONSE` and `result` is `0x0181` in
+`AUTHENTICATE_RESPONSE`, and `SERVING` and `OK` are both 2. A client that reads
+a `STATUS_RESPONSE` into an `AUTHENTICATE_RESPONSE` without checking `msg_type`
+reads a health check as a grant. §3.4 says so itself: two enumerations put an
+affirmative outcome at 2, so that section cannot separate them.
+
+What separates them is the `msg_type` check §6 makes a MUST, and §4's order,
+which rejects a response type the request does not permit at step 6, before any
+tag is compared. Treat that check as the whole of the defence rather than as the
+first of two, and dispatch into a per-type struct so the wrong field has nowhere
+to land.
 
 ## Carrying the credential
 
