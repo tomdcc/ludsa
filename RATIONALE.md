@@ -1734,9 +1734,27 @@ to the size plus a decode step in the very component this design keeps minimal.
 It is `bytes` rather than a string because the protocol is generic: another
 backend may carry a password, or something that is not text at all.
 
-**Why no party may normalise it.** A signature covers exact bytes, so any change
-breaks verification. The worse failure is asymmetric. A client that trims and a
-server that does not is a parser differential in an authentication path, and a
+**Why the rule is general, and why `credential` still names it.** §3.2 binds
+every sender to carry a value as the octets it was given, so the obligation
+reaches `user`, `service`, `rhost`, `ruser` and `tty` as well. Stating it once
+is deliberate: the ninth round removed a MUST from §5 that named three fields
+and so implied the rest were safe, and an enumeration here would repeat that.
+The ninth round also found only `credential` bound, which left a client free to
+trim or case-fold the role name a decision turns on.
+
+`credential` still carries its own sentence because the rule binds the server
+there as well. A signature covers exact bytes, so a value altered on either side
+is a different value, and there is an objectively right answer about what the
+octets are. `user` has no such answer: what a server's policy does with a name
+it received is that deployment's decision, and §6.2 already says the policy maps
+the credential's identity to the requested user. A deployment that folds case is
+choosing a policy, not misparsing, so the general rule binds the sender and
+stops there.
+
+**Why no party may normalise the credential.** A signature covers exact bytes,
+so any change breaks verification. The worse failure is asymmetric. A client
+that trims and a server that does not is a parser differential in an
+authentication path, and a
 single implementation that trims on *both* sides is self-consistent and passes
 all of its own tests. Only the conformance matrix catches it.
 

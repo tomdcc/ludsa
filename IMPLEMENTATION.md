@@ -733,6 +733,15 @@ implementation, shows anything wrong.
 value that arrived as text is the reflex, and it is invisible in a round-trip
 test because the same code trims both directions.
 
+**The same reflex reaches `user`, and there it is a role-name differential.**
+§3.2 binds a client to send the octets its host supplied, for every field. A PAM
+module that trims or case-folds `PAM_USER` asks the server about one name while
+its host admits another, and the server's `OK` licenses a role nobody requested.
+§7 drives it: a driver hands the client a `user` with leading and trailing
+whitespace and reads the request off the wire. A host that hands you a name you
+cannot encode, a NUL in a `string` for instance, is `INVALID_REQUEST` and no
+connection (§3.3), never a name you repair.
+
 **`ludsa-file` is where this bites twice.** `bufio.Scanner` strips the line
 terminator from the *stored* credential, and `strings.Fields` or `TrimSpace`
 strips it from the *parsed* one. Such a server agrees with itself completely and

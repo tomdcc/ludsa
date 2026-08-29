@@ -369,6 +369,7 @@ When it emits a message, a client or server MUST:
   1.0 message type does, so under version 1.0 every tag appears at most once.
 - Omit an optional field that has no value.
 - Emit no tag its own version does not define for that message type.
+- Emit a value it is passing on as the octets it was given.
 
 Ascending order binds every message, so a receiver checks it against the tag
 before it without knowing which schema applies. Whether a repeat is legal does
@@ -376,16 +377,21 @@ not: only the message type says. §4 therefore checks the two at different
 points, and a receiver that rejects a repeat before it knows the type is
 refusing a message it cannot adjudicate.
 
-The last binds a sender to its own version and not to 1.0, because a later
-version emits tags 1.0 never assigned (§4.1). What it forbids is emitting a tag
-no version defines. A receiver skips one, so nothing breaks today; what breaks
-is later, when a minor version assigns that tag and a peer implementing it reads
-the padding as the field.
+The rule against emitting an undefined tag binds a sender to its own version and
+not to 1.0, because a later version emits tags 1.0 never assigned (§4.1). What
+it forbids is emitting a tag no version defines. A receiver skips one, so
+nothing breaks today; what breaks is later, when a minor version assigns that
+tag and a peer implementing it reads the padding as the field.
 
-It binds a sender. What a receiver does about a breach is §4's: it MAY reject
-where the message declares a minor version it implements, and MUST skip where it
-does not, since only the first leaves it holding the schema that settles the
-question.
+It binds a sender. What a receiver does about a breach is §4's, and it turns on
+the tag's field number rather than on the version the message declares.
+
+**A sender carries a value as it received it.** The octets a client emits in a
+field are the octets its host application supplied. No party normalises a value
+it is passing on: no trimming, no stripping a trailing newline, no case folding,
+no Unicode normalisation, no re-encoding. §3.1 forbids truncating a value to
+fit, and this is the same rule for every other way a value can change in
+transit.
 
 A value of zero octets is a value, not an absent field. Whether one is
 acceptable is a decision for the receiving application, not for this protocol.
@@ -418,6 +424,11 @@ from 1.
 | `string` | `0x2` | dynamic | MUST NOT contain a NUL octet |
 | `utf8` | `0x3` | dynamic | MUST NOT contain a NUL octet; MUST be valid UTF-8 |
 | `bytes` | `0x4` | dynamic | none |
+
+A client asked to send a value its field's type does not permit MUST NOT open a
+connection to send it, and reports the condition §7 names `INVALID_REQUEST` to
+its host application. §3.1 says the same for a value above its maximum. Neither
+lets a client alter the value to make it sendable (§3.2).
 
 **A tag's shape is checked before its identity.** A receiver MUST reject a tag
 as `REQUEST_MALFORMED` on any of these grounds, whether or not it recognises
@@ -999,6 +1010,11 @@ When `user` is present, a server MUST NOT answer `OK` unless the credential
 identifies the requested `user`, or the server's policy maps the credential's
 identity to it. A valid credential alone is never sufficient.
 
+A client that normalises `user` asks about a name its host application did not
+ask about, and an `OK` then licenses a role nobody requested. §3.2 forbids it.
+What a server's policy does with the name it received is that deployment's
+decision, and §3.2 does not reach it.
+
 An absent `user` and a present `user` of zero octets are different requests. The
 first asks the server not to decide. The second asks it to decide about the user
 named by the empty string, which §3.2 makes a value like any other. A server
@@ -1040,8 +1056,10 @@ sent MUST answer `SERVICE_UNSUPPORTED` (§6.2.1), and MUST NOT fall back to a
 default policy.
 
 `credential` is carried **verbatim, as raw bytes with an explicit length**, and
-is never re-encoded. **The client and the server MUST NOT normalise it.** No
-trimming, no stripping of a trailing newline, no case folding. A server SHOULD
+is never re-encoded. §3.2 binds every sender to this, and here it binds the
+server too: **neither party may normalise it.** No trimming, no stripping of a
+trailing newline, no case folding. A signature covers the octets that were
+signed, so a value altered on either side is a different value. A server SHOULD
 still detect leading or trailing whitespace and record the condition, not the
 value, in its own log. A credential that fails validation is a decision
 (§6.2.1), and a decision carries no field for a diagnosis.
@@ -1402,10 +1420,10 @@ document does not specify. A driver MUST be given all of them:
   a client needs it, including one marked `either`. None of those names crosses
   the socket and a client using its own is conforming, so a driver can infer
   neither the names nor the channel from anything the wire carries.
-- **F8**: a route by which a driver hands the client under test a value above a
-  §3.1 maximum, through the client's own host interface. For a PAM client that
-  is a conversation supplying an oversized token. A client whose host cannot
-  present one cannot run the case below and is not non-conforming for that.
+- **F8**: a route by which a driver hands the client under test a value of its
+  choosing, through the client's own host interface. For a PAM client that is a
+  conversation supplying a token. A client whose host cannot present the value a
+  case names cannot run that case and is not non-conforming for that.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1506,6 +1524,18 @@ connected before reporting has already failed it. §3.1 states the other half of
 that sentence in the indicative rather than as a MUST, so the name is a
 client-local one under this section's usual terms and the prohibition on
 connecting is what binds.
+
+One further case observes the octets a client puts on the wire, which §3.2
+binds. The driver hands the client a `user` carrying leading and trailing
+whitespace, and reads the request:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A `user` carrying leading and trailing whitespace, handed to the client through its host interface | client | the `user` field on the wire carries those octets unchanged | F8 |
+
+A client that trims, folds case or re-encodes fails it. §3.2's rule names no
+field; `user` is what the case drives, because §6.2 has a server's decision turn
+on it.
 
 One further case observes what a client does after it writes, which §2 requires
 of every client and no status reports. The driver accepts a connection, reads
