@@ -1027,6 +1027,35 @@ It must not inform a decision, for the same reason `pid` must not. It is a
 peer-supplied value, and under *checked, never consulted* such a value may be
 tested against configuration but never used to select behaviour.
 
+**Why the field number, and not the declared version, decides what a receiver
+does with a tag it does not recognise.** The declared version is peer-supplied,
+so a rule turning on it makes the receiver's answer depend on the sender
+reporting its own version correctly. The field number does not. §4.1 freezes a
+number's assignment, and requires a later version to take a number higher than
+every number already assigned. So a number at or below the highest one a
+receiver's version assigns can never acquire a new meaning. A tag carrying such
+a number, whose whole value is not that number's assignment, is one no version
+defines, and a receiver can prove it without trusting anything the sender said.
+
+That is what makes rejecting it safe. Skip-unknown is the fail-open evolution
+mode and it earns its place only where the tag might be legitimate. Where it
+cannot be, skipping ignores a peer the receiver has just proved broken, in an
+authentication path.
+
+The ninth round found §7 and §4 disagreeing here, §7 making the skip a MUST and
+§4 making it one of two conforming answers, so a conforming server failed the
+conformance suite. Deciding on the number settled both, and made the case
+testable in a way neither reading had been: a receiver now fails it by reading
+the value into the defined field, and fails it by skipping the tag and parsing
+on.
+
+The eighth round's latitude survives where it means something. A field number
+above the highest a receiver assigns may belong to a later version, so a
+receiver skips it; where the message also declares a minor version the receiver
+implements, the sender has broken §3.2 by carrying the tag at all, and a
+deployment that wants strict input in an authentication path may reject on that
+ground.
+
 **Why no negotiation.** The two ends are not deployed together. Each declares
 its own version, and §3.3 makes a minor difference safe without either side
 agreeing to anything. Rejecting a major mismatch outright makes an incompatible

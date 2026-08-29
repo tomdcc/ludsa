@@ -600,14 +600,23 @@ A `map[uint8]field` keyed by number looks natural and is wrong. `0x0242` is
 optional, dynamic, `string`, field number 2, and it passes every shape check;
 `credential` in an `AUTHENTICATE_REQUEST` is `0x02C4`, also number 2. Sent in
 that order they ascend, so the framing pass accepts both, and a number-keyed
-decoder either stores the first into `credential`'s slot or rejects a message it
-should have accepted. `0x0142` before `0x0181` is the same shape against a
-client, putting a dynamic `string` where the one-octet `result` belongs.
+decoder stores the first into `credential`'s slot. `0x0142` before `0x0181` is
+the same shape against a client, putting a dynamic `string` where the one-octet
+`result` belongs.
 
 No conforming peer produces this: §4.1 requires a later version's field to take
 a number higher than every number already assigned in that message type, so
 number 2 can never be reassigned in `AUTHENTICATE_REQUEST`. It is what a broken
 or hostile peer sends, and §7 drives it against both sides.
+
+**The answer is a rejection, and §4 leaves no choice about it.** Because no
+version can give `0x0242` a meaning in an `AUTHENTICATE_REQUEST`, skipping it
+would be fail-open against a peer the receiver can prove broken. Compare the
+incoming field number against the highest your schema assigns for that message
+type: above it, skip the field; at or below it, reject the message. A whole-tag
+decoder that skips fails §7's case as surely as a number-keyed one that reads,
+so a decoder that gets the whole-tag comparison right and the number comparison
+wrong still fails.
 
 **Absent and empty are different, and a struct field cannot hold both.** §3.2
 makes a value of zero octets a value rather than an absent field, so `""` from a

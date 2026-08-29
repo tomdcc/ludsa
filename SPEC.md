@@ -450,12 +450,16 @@ does not recognise.
 For a tag it does not recognise:
 
 - **Required**: it MUST abort the exchange and return `REQUEST_MALFORMED`.
-- **Optional**: where the tag passed the shape checks above, it MUST skip the
-  field without error, using bit 6 and, when clear, bits 5–4 to know how many
-  octets to skip. §4 gives it one alternative, where the message declares a
-  minor version it implements.
+- **Optional**: where the tag passed the shape checks above, its field number
+  decides. Above every number the receiver's version assigns for that message
+  type, it MUST skip the field without error, using bit 6 and, when clear, bits
+  5–4 to know how many octets to skip. At or below that number, no version can
+  give the tag meaning. §4.1 freezes a number's assignment, and requires a later
+  version to take a number higher than every number already assigned. The sender
+  is broken, and the receiver MUST abort the exchange and return
+  `REQUEST_MALFORMED`.
 
-A receiver skips every occurrence of an unrecognised optional tag, including one
+A receiver that skips such a tag skips every occurrence of it, including one
 equal to a tag it has already skipped. Whether a repeat is legal is a property
 of the message type's schema (§3.2), and a receiver holds no schema for a tag it
 does not recognise. A later minor version may assign a repeatable optional field
@@ -564,22 +568,32 @@ whose `ludsa_version_minor` differs from its own, in either direction, and MUST
 parse it under the rules of §3.3. A higher minor version can only add fields
 that are safe to skip.
 
-**A receiver parses by tag and not by the declared version.** It skips a tag it
-does not recognise and reads one it does, and the version a message declares
+**A receiver parses by tag and not by the declared version.** It matches a tag
+against its own schema for that message type, and the version a message declares
 never selects the schema it parses under.
 
-That value settles one thing. Where a message declares a minor version the
-receiver implements, and carries a tag that version does not define for that
-message type, the sender has broken §3.2 and the receiver holds the schema that
-proves it. It MAY reject the message as `REQUEST_MALFORMED`, and it MAY skip the
-tag as §3.3 has it skip any other. Neither is preferred and both conform, so a
-deployment that wants strict input in an authentication path may have it and one
-that wants tolerance may have that.
+That value settles less than it appears to. What a receiver does with a tag it
+does not recognise is decided by the tag's field number, not by the version the
+message declares. §4.1 fixes what a number may mean before any message declares
+anything.
 
-Where the declared minor version is one the receiver does not implement, it MUST
-skip. It holds no schema that would settle whether the tag is legitimate, and
-§4.1 leaves a later version free to define it, so a receiver rejecting there
-would fail a conforming peer.
+Where the field number is at or below the highest number the receiver's version
+assigns for that message type, no version can give the tag meaning. Either the
+number is assigned there already, and §4.1 freezes that assignment. Or it is one
+a numbering left behind, and §4.1 requires a later version to take a number
+higher than every number already assigned. The sender is broken and the receiver
+can prove it, so it MUST reject the message as `REQUEST_MALFORMED`, whatever
+minor version the message declares. §3.3 carries the rule.
+
+Where the field number is above that, the tag may be one a later version
+assigns, and the receiver holds no schema that would settle it. It MUST skip, as
+§3.3 has it skip any other. Rejecting there would fail a conforming peer.
+
+The declared minor version qualifies that second case alone. A message declaring
+a minor version the receiver implements has broken §3.2 by carrying the tag at
+all, so a receiver MAY reject it on that ground instead of skipping. Neither is
+preferred and both conform. A deployment that wants strict input in an
+authentication path may have it, and one that wants tolerance may have that.
 
 The minor version is for logs, and a server MAY tailor what it sends to the one
 a request declares (§3). It MUST NOT inform an authentication decision, and it
@@ -685,9 +699,11 @@ become repeatable later, which is the frozen rule above.
 A field a later version adds to a message type MUST take a number higher than
 every number already assigned in that type. That is what makes §3.3's ordering
 property hold: the field sorts after every field already defined there, so an
-encoder appends rather than inserting. Version 1.0 assigns every number in
-sequence, and a number a later version skips, or one a retired field left
-behind, stays empty.
+encoder appends rather than inserting. It is also what lets a receiver reject a
+tag it can prove no version defines (§3.3), since a number at or below the
+highest one its version assigns can never acquire a new meaning. Version 1.0
+assigns every number in sequence, and a number a later version skips, or one a
+retired field left behind, stays empty.
 
 A required field is the only addition here a predating peer never sees. It stops
 at step 1 of §4's order, on the major version. It reaches no tag. §3.3's rule
@@ -1530,9 +1546,10 @@ prohibition: a client MUST NOT report a `REQUEST_` code for any of them.
 
 A receiver MUST accept a message whose `ludsa_version_minor` differs from its
 own, in either direction, and MUST skip an unrecognised **optional** tag without
-error, including one that appears more than once. The skipping obligation is
-absolute only for a minor version the receiver does not implement; §4 lets it
-reject instead where it holds the schema that proves the tag illegitimate.
+error, including one that appears more than once. The skipping obligation
+reaches a field number above every number the receiver's version assigns for
+that message type. At or below that number §4 has it reject, whatever minor
+version the message declares.
 
 A receiver MUST accept a message whose declared length is exactly the minimum
 for the version, which a `PING_REQUEST` carrying no fields is, and a field whose
@@ -1541,11 +1558,15 @@ MUST report an enumerated value it does not recognise as that enumeration's 1
 (§3.4) and MUST NOT report it as an affirmative outcome, so a `result` of 200 is
 `AUTHN_UNKNOWN` and never `OK`, and so is a `result` of 0.
 
-A receiver MUST skip an unrecognised optional tag whose field number equals that
-of a tag the message type does define, and read the defined field from its own
-whole tag. §3.3 matches a tag whole and never by field number. `0x0242` placed
-before `0x02C4` in an `AUTHENTICATE_REQUEST` drives this against a server, and
-`0x0142` before `0x0181` in an `AUTHENTICATE_RESPONSE` against a client.
+A receiver MUST reject a tag whose whole value is not the assignment its field
+number carries. That reaches a number its version assigns, and a number left
+unassigned below the highest number it assigns. §3.3 matches a tag whole and
+never by field number, and §4.1 is what makes the rejection safe: no version can
+give such a tag meaning. `0x0242` placed before `0x02C4` in an
+`AUTHENTICATE_REQUEST` drives this against a server, and `0x0142` before
+`0x0181` in an `AUTHENTICATE_RESPONSE` against a client. A receiver fails the
+case if it reads the tag's value into the defined field, and fails it if it
+skips the tag and parses the rest.
 
 **A client reports a fault to its caller.** It has no status to send: a fault it
 found in a response is not a statement about the request it sent, and a request
