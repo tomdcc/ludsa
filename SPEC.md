@@ -585,9 +585,14 @@ higher than every number already assigned. The sender is broken and the receiver
 can prove it, so it MUST reject the message as `REQUEST_MALFORMED`, whatever
 minor version the message declares. §3.3 carries the rule.
 
-Where the field number is above that, the tag may be one a later version
+Where the field number is above that, an optional tag may be one a later version
 assigns, and the receiver holds no schema that would settle it. It MUST skip, as
 §3.3 has it skip any other. Rejecting there would fail a conforming peer.
+
+A required tag is settled at any field number. A field a later version adds is
+optional, since a required one forces a major bump (§4.1), so a required tag a
+receiver does not recognise is one no version within that major version defines.
+§3.3 has it abort and return `REQUEST_MALFORMED`.
 
 The declared minor version qualifies that second case alone. A message declaring
 a minor version the receiver implements has broken §3.2 by carrying the tag at

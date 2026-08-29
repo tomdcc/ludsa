@@ -1051,7 +1051,9 @@ on.
 
 The eighth round's latitude survives where it means something. A field number
 above the highest a receiver assigns may belong to a later version, so a
-receiver skips it; where the message also declares a minor version the receiver
+receiver skips an optional tag carrying it. A required tag never qualifies,
+since a later version's addition is optional. Where the message also declares a
+minor version the receiver
 implements, the sender has broken §3.2 by carrying the tag at all, and a
 deployment that wants strict input in an authentication path may reject on that
 ground.

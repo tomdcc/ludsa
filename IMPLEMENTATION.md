@@ -613,7 +613,9 @@ or hostile peer sends, and §7 drives it against both sides.
 version can give `0x0242` a meaning in an `AUTHENTICATE_REQUEST`, skipping it
 would be fail-open against a peer the receiver can prove broken. Compare the
 incoming field number against the highest your schema assigns for that message
-type: above it, skip the field; at or below it, reject the message. A whole-tag
+type: above it, skip an optional field; at or below it, reject the message. An
+unrecognised required tag is malformed at any number, since a later version's
+addition is optional (§4.1). A whole-tag
 decoder that skips fails §7's case as surely as a number-keyed one that reads,
 so a decoder that gets the whole-tag comparison right and the number comparison
 wrong still fails.
