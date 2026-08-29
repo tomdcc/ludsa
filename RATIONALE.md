@@ -1445,7 +1445,29 @@ sit.
 
 The three positions survive because each buys something. Accept is the cheapest
 and the only one at which saying nothing is still open, so a server unwilling to
-disclose the refusal checks there. The version word is the earliest point at
+disclose the refusal checks there.
+
+**Why a refusal at accept reads nothing.** The ninth round found §5's accept
+bullet citing §2's bounded interval, which §2 asks a server to allow before it
+answers in its own major version. Both reviewers proposed making the bullet
+match §2. The author reversed it. §2's reason for the interval is that a client
+about to send is better answered in its own version, and that presumes a peer
+worth accommodating. A server that has just refused one on its credentials has
+decided the connection is untrusted, and allowing the interval means parsing
+octets from that connection to decide what the refusal looks like. So §2 gained
+the exception rather than §5 gaining the wait.
+
+The prohibition is on reading after deciding to refuse, not before. A server
+that reads `ludsa_version_major` and checks afterwards has parsed nothing it had
+already refused, which is why the second position survives unchanged.
+
+A drain is a separate question and the answer falls out. §3's drain binds a
+server that rejected a message, and a refusal at accept precedes any message, so
+none is owed. A server may still read and discard, which is what keeps a client
+from being cut off mid-write, and it must not parse what it reads. It therefore
+holds no length it may rely on, and §3 already says the declared-length
+terminator does not apply where a server has none. The version word is the
+earliest point at
 which an answer can go back in the version the client chose, which is why it is
 the recommendation for a server with nothing else to wait for. Reading the
 request is what a per-`service` peer rule requires, and that rule is a real

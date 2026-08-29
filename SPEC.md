@@ -75,6 +75,8 @@ fewer than that value needs.
 `ludsa_version_major` MAY answer in its own major version instead of closing.
 Before it does, it SHOULD allow the client a bounded interval to supply one,
 because a client that is about to send is better answered in its own version.
+§5 is the exception. A server refusing the connection on the peer's credentials
+MUST NOT read from it to learn a version, so no interval applies there.
 §4 already has a server reply in its own major version when it cannot use the
 client's; this is the same move where it has not been given one.
 
@@ -805,14 +807,22 @@ document does not require. **A server that refuses a peer SHOULD answer at the
 earliest point it is permitted to answer**, and where it makes the check is what
 decides that point:
 
-- **At accept.** It has no version from the client, so §2 lets it answer in its
-  own major version at once, or close without replying.
+- **At accept.** It has no version from the client and MUST NOT read one. The
+  refusal is about the connection, so nothing arriving on it may inform the
+  answer, including which version the answer takes. It closes without replying,
+  or answers `PEERCRED_DENIED` in its own major version at once.
 - **After reading `ludsa_version_major`.** It answers in the version the client
   chose. §2 binds it from that point: it MUST answer, and `PEERCRED_DENIED` is
   the status for this refusal.
 - **After reading the request**, where the refusal depends on what the request
   says. A server whose rules govern which peers may reach which `service`
   values cannot decide before it has read one.
+
+A server refusing at accept owes no drain, since §3's binds a server that
+rejected a message and this refusal precedes any. It MAY read and discard so
+that a client still writing is not cut off mid-write, and MUST NOT parse what it
+reads. It holds no length it may rely on, so §3's declared-length terminator
+does not apply and the rest do.
 
 A server with no such rules SHOULD answer after the version word, or after a
 bounded interval waiting for one, that being the earliest point at which it can
@@ -1522,7 +1532,7 @@ a value its own maximum forbids:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A value above the §3.1 maximum of a field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F7, F8 |
+| A value above the §3.1 maximum of a field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F8 |
 
 The report is what ends the case, so no deadline is needed: a client that
 connected before reporting has already failed it. §3.1 states the other half of
