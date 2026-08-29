@@ -272,9 +272,26 @@ close.
 
 ## Writing to the socket
 
+**A server closing while a client is still writing is expected, not
+exceptional.** §2 lets a server close without replying before it has read a
+version, at its concurrency bound, on a peer refusal made at accept, and when
+its response deadline expires. §3 has it close when the drain ends, which
+narrows that window rather than removing it. A client sending a large
+`credential` will meet this. Every client therefore has to decide what a failed
+write does to it.
+
+**What the failed write does differs by runtime**, which is why the
+specification says nothing about it and this document says a good deal. In C the
+kernel raises `SIGPIPE` and the default action terminates the process. In Go the
+runtime raises it only for file descriptors 1 and 2, so a write to a closed
+socket returns `EPIPE` as an ordinary error and nothing dies. A runtime that
+maps signals to exceptions gives you a third shape. The cause is one sequence
+and the manifestation is a property of the language, so a rule in the protocol
+would be written for one of them and wrong for the rest.
+
 **Suppress `SIGPIPE` per write, and leave the host's disposition alone.**
-Writing to a socket whose peer has closed raises `SIGPIPE`, whose default action
-terminates the process. A client is a guest inside `sshd` or a PostgreSQL
+Writing to a socket whose peer has closed raises `SIGPIPE` in C, whose default
+action terminates the process. A client is a guest inside `sshd` or a PostgreSQL
 backend, so the default action is the host dying in the middle of an
 authentication.
 
@@ -293,6 +310,10 @@ at all. Between them every port under consideration is covered, so the portable
 route, blocking `SIGPIPE` with `pthread_sigmask` and consuming a pending one
 with `sigtimedwait` after a failed write, is not needed here. It is what someone
 reaches for when aiming at a portability this project does not want.
+
+None of that reaches the Go client, which gets an error where the C one gets a
+signal. What does reach it is the paragraph below: the write failing is not the
+end of the exchange, and the response may already be waiting.
 
 **A short write and an `EINTR` are resumable.** Both are routine inside a host
 that installs handlers without `SA_RESTART`, which is the host's prerogative and
