@@ -651,9 +651,12 @@ check takes the outcome of the earliest:
 13. the decision
 
 The peer check §5 describes is not one of these steps. It concerns the
-connection rather than the message, and §5 has a server answer a refusal at the
-earliest point it can, which for a server whose refusal does not turn on the
-request is before any of this order has run.
+connection rather than the message, and where a server makes it decides where
+its refusal falls. A server checking at accept refuses before any of this order
+has run, and §5 has it read no version, so it never holds step 1's status at
+all. A server checking after the version word holds its refusal alongside step
+1. A server whose refusal turns on `service` cannot reach one before step 11.
+§5 says which it sends where it holds both.
 
 Step 4 checks only what a receiver can check without knowing which schema
 applies. A tag equal to the tag before it is a repeat, which step 7 judges

@@ -1453,6 +1453,16 @@ server whose rules govern which peers may reach which `service` values cannot
 decide before it has read one. A request too malformed to yield a `service`
 never lets it decide at all, so the framing status is the only answer it has.
 
+Where each position falls in §4's order is what makes the tie-break describe
+something. A server checking at accept refuses before step 1 and, since the
+ninth round, reads no version at all, so it never holds step 1's status and no
+tie can arise there. A server checking after the version word holds both
+verdicts at the same moment, which is the case the tie-break is about. A server
+whose refusal turns on `service` cannot reach one before step 11. §4 used to put
+every request-independent refusal before the whole order, which covered the
+first two positions alike and left the tie-break describing a case that could
+not occur.
+
 That removes most of the choice rather than all of it, which is the right
 amount. Where a server reaches both verdicts together it may answer either, and
 nothing
