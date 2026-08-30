@@ -244,11 +244,16 @@ A client or server MUST read `ludsa_version_major` first, and MUST NOT interpret
 any later octet until it has established that it implements that major version
 (§4). The rest of this section describes version 1 only.
 
-A client or server MUST read `length`, then read exactly that many octets. It
-MAY read further from the socket, as a buffered reader will, but MUST NOT
-interpret any octet past the declared length and MUST discard what it read
-beyond it. §2 governs what it does with octets it observes there. The envelope
-lies outside the declared length and is read from the stream directly.
+A client or server that parses a message MUST read `length`, then read exactly
+that many octets. It MAY read further from the socket, as a buffered reader
+will, but MUST NOT interpret any octet past the declared length and MUST discard
+what it read beyond it. §2 governs what it does with octets it observes there.
+The envelope lies outside the declared length and is read from the stream
+directly.
+
+A receiver that has rejected the message is not parsing it, and this rule does
+not bind it. A server drains as this section requires below. A client MAY close
+as soon as it has determined what it will report.
 
 A receiver is not required to retain the whole declared length. It MAY discard a
 field it does not keep, including an unrecognised optional field it skips

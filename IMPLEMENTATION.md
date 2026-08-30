@@ -196,10 +196,17 @@ does not hold, and do not
 interpret anything past the declared length. §3's constraint is on what a
 receiver interprets, not on holding a message whole.
 
-`MAX_LENGTH` still bounds the discard path, so a client must read a
-32768-octet declared length to completion before it can report anything. That
-costs wall time rather than memory, and the scratch it discards through can be a
-few hundred octets reused in a loop.
+`MAX_LENGTH` still bounds the discard path, so a client parsing a 32768-octet
+declared length reads it to completion. That costs wall time rather than memory,
+and the scratch it discards through can be a few hundred octets reused in a
+loop.
+
+A client that has **rejected** the message is not parsing it, and §3 relieves it
+of reading the rest: report and close. The distinction is worth coding as a
+distinction, because the two look alike in a read loop and only one of them has
+an answer already determined. It is also the whole of a client's obligation
+here. A server owes a drain because its peer may still be writing a credential;
+nothing is waiting on a client's read, so a client owes none.
 
 **The extent check overflows before the allocation does.** §3 forbids
 allocating from an unchecked length, and the check that guards it is the earlier

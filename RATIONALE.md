@@ -498,6 +498,26 @@ version it can parse.
 What the case cannot settle is a server whose drain bound is shorter than the
 round trip. It stopped draining legitimately and looks exactly like one that
 never started, which is why the bound is a fixture rather than an assumption.
+
+**Why only a server drains, and why the asymmetry is not an oversight.** §3's
+read-exactly rule used to bind every receiver with no exception, while the drain
+had a server stop short of the declared length and §4 let any receiver report a
+fault without waiting for the rest to arrive. A client that found a fault at the
+twentieth octet of a response declaring thirty-two kilobytes had to breach one
+rule or the other. The ninth round scoped the rule to a receiver that is parsing
+the message, which is what it was always about: do not interpret past the
+declared length, and do not under-read and take the next message's octets for
+this one's. A receiver that has rejected is not parsing.
+
+What relieves the two sides differs, and it should stay that way. A server
+drains because the client may still be writing a credential of up to sixteen
+kilobytes and would be cut off mid-write. A client rejecting a response has
+nothing of the sort to protect: the server has already written its answer, and
+§2 has a response that was written survive the close. The most a server takes is
+`EPIPE` on a write it had not finished, which is exactly the cost the drain
+spends effort sparing a client. So the client gets a permission to close and no
+obligation to drain, and a later round proposing to give it one should read this
+paragraph first.
 Nor can it separate a draining server from one that shut down its write
 direction and never read: both accept the driver's write, since a kilobyte fits
 in a receive buffer nobody is emptying. What the case detects is the close, and
