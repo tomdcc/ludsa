@@ -1055,28 +1055,50 @@ Nothing binds a server. Filesystem permissions are the access control the
 protocol relies on. A server that checks anyway is worth the trouble in most
 deployments, and §5 gives it a status to report the refusal with.
 
-**Where the check goes decides what the server owes, and §5 asks it to answer as
-early as it may.** At accept, a server has nothing from the client to answer in:
-it may answer in its own major version, or close without replying, which costs
-it the diagnosis and leaks nothing. After reading `ludsa_version_major` it MUST
-answer, and `PEERCRED_DENIED` is what it answers with: that reaches the client's
-logs in the client's own version and points an operator at the allowlist.
-Appendix B maps it to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode
-draws, so the stack falls through and the log carries the diagnosis. Before the
-status existed the first was the only conforming option, because §2 obliges a
-server to answer once it holds a version and §5 had nothing that fit.
+**Check at accept, before you read anything.** §5 makes it a MUST. `SO_PEERCRED`
+is readable there and costs nothing to keep, so nothing is gained by waiting and
+a server that waits has parsed octets from a peer it could already have refused.
 
-**Check at the version word unless a rule of yours needs the request.** That is
-§5's recommendation and it is the earliest point that yields a reply in the
-client's version. Deferring past it is for a server whose peer rules turn on
-`service`, and it has a cost: such a server meeting a request too malformed to
-yield a `service` cannot complete the check at all, and answers the framing
-status instead.
+**Then choose one of three answers, and the choice is about diagnosis rather
+than about correctness.** Close without replying, which leaks nothing and costs
+the client its diagnosis. Answer `PEERCRED_DENIED` at once in your own major
+version, which costs nothing and reaches a client configured for that version.
+Or wait a bounded interval for `ludsa_version_major` and answer in the version
+the client declared, which reaches its logs whatever version it speaks and holds
+a connection open for a peer you have already refused. Appendix B maps the
+status to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode draws, so
+the stack falls through and the log carries the diagnosis.
 
-**Do not defer it to compare process ids.** Reading `SO_PEERCRED` at accept and
-keeping it costs nothing, so the uid check runs early and the pid comparison
-below runs later against the same stored value. The comparison needs the
-request; the allowlist check does not.
+**Whatever arrives on that interval, the answer is `PEERCRED_DENIED`.** A
+version you do not implement is not `VERSION_UNSUPPORTED` here, and an interval
+that expires with nothing read is not `REQUEST_TIMEOUT`. Both describe something
+the peer did after you had already refused it, and either would send an operator
+to the wrong configuration file. The version word chooses an encoding and
+decides nothing, which is the only reason reading it is safe.
+
+**Default to the third answer, and fall back to the first under load.** Waiting
+for `ludsa_version_major` and replying in the client's own version is what puts
+a usable diagnosis in the client's log, and reading and discarding while you do
+it keeps a client that is still writing a credential from taking `EPIPE`. Make
+that the normal path.
+
+Under load the same behaviour works against you. Every refused connection then
+costs an interval and a discard loop, and an unauthorised peer opening
+connections in bulk is what produces the load in the first place. Set a
+threshold past which a refused connection is closed at once, with no wait and no
+discard. §5 permits that without qualification, and a server with no such
+threshold has no way to shed the cost.
+
+**A peer rule that turns on `service` is a second gate, not a later check.** The
+credentials check still runs at accept. What waits is which services this peer
+may reach, and `PEERCRED_DENIED` answers that too. Such a server meeting a
+request too malformed to yield a `service` cannot settle the second gate at all,
+and answers the framing status instead.
+
+**Do not defer the credentials check to compare process ids.** Reading
+`SO_PEERCRED` at accept and keeping it costs nothing, so the uid check runs
+immediately and the pid comparison below runs later against the same stored
+value. The comparison needs the request; the allowlist check does not.
 
 **Reading the version word and then closing in silence is not conforming.** It
 is the shape a peercred check acquires by accident: read the envelope, decide

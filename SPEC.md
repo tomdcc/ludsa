@@ -76,7 +76,8 @@ fewer than that value needs.
 Before it does, it SHOULD allow the client a bounded interval to supply one,
 because a client that is about to send is better answered in its own version.
 §5 is the exception. A server refusing the connection on the peer's credentials
-MUST NOT read from it to learn a version, so no interval applies there.
+MAY answer at once without allowing any interval, and where it allows one it
+answers `PEERCRED_DENIED` whether or not a version arrives.
 §4 already has a server reply in its own major version when it cannot use the
 client's; this is the same move where it has not been given one.
 
@@ -651,12 +652,12 @@ check takes the outcome of the earliest:
 13. the decision
 
 The peer check §5 describes is not one of these steps. It concerns the
-connection rather than the message, and where a server makes it decides where
-its refusal falls. A server checking at accept refuses before any of this order
-has run, and §5 has it read no version, so it never holds step 1's status at
-all. A server checking after the version word holds its refusal alongside step
-1. A server whose refusal turns on `service` cannot reach one before step 11.
-§5 says which it sends where it holds both.
+connection rather than the message, and §5 has it made on accept, before any of
+this order has run. A server that refuses there and then waits for
+`ludsa_version_major` may reach step 1's status as well, and §5 has
+`PEERCRED_DENIED` displace it. A server whose rules also govern which peers may
+reach which `service` values cannot settle that second question before step
+11.
 
 Step 4 checks only what a receiver can check without knowing which schema
 applies. A tag equal to the tag before it is a repeat, which step 7 judges
@@ -811,45 +812,41 @@ whole of its value. A field above its §3.1 maximum is not `REQUEST_TOO_LARGE`,
 because a receiver finds one only inside a body it has already accepted.
 
 `PEERCRED_DENIED` is for a server that checks the connecting peer, which this
-document does not require. **A server that refuses a peer SHOULD answer at the
-earliest point it is permitted to answer**, and where it makes the check is what
-decides that point:
+document does not require. **A server configured to check MUST do so
+immediately after it accepts the connection**, before it reads anything from it.
 
-- **At accept.** It has no version from the client and MUST NOT read one. The
-  refusal is about the connection, so nothing arriving on it may inform the
-  answer, including which version the answer takes. It closes without replying,
-  or answers `PEERCRED_DENIED` in its own major version at once.
-- **After reading `ludsa_version_major`.** It answers in the version the client
-  chose. §2 binds it from that point: it MUST answer, and `PEERCRED_DENIED` is
-  the status for this refusal.
-- **After reading the request**, where the refusal depends on what the request
-  says. A server whose rules govern which peers may reach which `service`
-  values cannot decide before it has read one.
+A server whose check fails does one of three things:
 
-A server refusing at accept owes no drain, since §3's binds a server that
-rejected a message and this refusal precedes any. It MAY read and discard so
-that a client still writing is not cut off mid-write, and MUST NOT parse what it
-reads. It holds no length it may rely on, so §3's declared-length terminator
-does not apply and the rest do.
+- closes the connection without replying;
+- answers `PEERCRED_DENIED` at once in its own major version, having read
+  nothing;
+- waits a bounded interval to read `ludsa_version_major`, and answers
+  `PEERCRED_DENIED` in the version the client declared.
 
-A server with no such rules SHOULD answer after the version word, or after a
-bounded interval waiting for one, that being the earliest point at which it can
-answer in the client's own version.
+The third reads a version to choose an encoding and for nothing else. A version
+this server does not implement, and an interval that expires with none read, are
+both answered `PEERCRED_DENIED` in the server's own major version. Neither
+`VERSION_UNSUPPORTED` nor `REQUEST_TIMEOUT` displaces it, because the refusal
+was settled before either could arise and nothing the peer sends can change it.
 
-A server may hold both a peer refusal and a status from §4's order. Where one
-was available earlier, answering at the earliest permitted point means answering
-that one. Where both arrive together, either conforms: a peer that is not
-permitted and whose `ludsa_version_major` this server does not implement is
-misconfigured twice over, and this document does not choose which half it hears
-about. A request too malformed to yield the `service` a server's rules turn on
-settles the question by itself, since the peer check cannot complete and the
-framing status is the only answer it has.
+Such a server owes no drain, since §3's binds a server that rejected a message
+and this refusal precedes any. It MAY read and discard so that a client still
+writing is not cut off mid-write, and parses nothing beyond
+`ludsa_version_major`. It holds no length it may rely on, so §3's
+declared-length terminator does not apply and the rest do.
+
+A server whose rules also govern which peers may reach which `service` values
+has a second gate. It cannot close that one before it has read a `service`. Its
+credentials check still happens at accept. What waits is which services this
+peer may reach, a question §4's step 11 settles and `PEERCRED_DENIED` also
+answers. A request too malformed to yield a `service`
+never lets it decide, so the framing status is the only answer it has.
 
 It discloses that the peer was refused and why. That is a smaller disclosure
 than it looks, because a uid is not freely chosen: an attacker must already be
 running as one to try it, where a user name can be guessed without limit. A
-server unwilling to disclose even that makes the check before it reads a
-version, which is the point at which saying nothing is still open to it.
+server unwilling to disclose even that closes without replying. That is the
+first of the three answers above, and the only one that says nothing.
 
 `RATE_LIMITED` has a producer at each end of an exchange.
 §6.3 has a server decline a check that `max_age` would have forced, which is

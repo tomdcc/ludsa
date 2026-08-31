@@ -1446,68 +1446,77 @@ silence cost. A peer that is both unauthorised and sending a faulty request has
 two true things a server could report, and which one it reports came down to
 where the implementer happened to put the check.
 
-So the rule is about answering rather than about checking: as early as this
-document permits. A server whose refusal does not depend on the request holds
-its verdict before any octet of a body is parsed, so that is what it answers. A
-server whose rules govern which peers may reach which `service` values cannot
-decide before it has read one. A request too malformed to yield a `service`
-never lets it decide at all, so the framing status is the only answer it has.
+So the rule is about when the check happens, and the answer is at accept, before
+the server has read anything. The kernel's credentials are readable there and
+can be kept, so waiting gains nothing and a server that waits has read octets
+from a peer it could already have refused.
 
-Where each position falls in §4's order is what makes the tie-break describe
-something. A server checking at accept refuses before step 1 and, since the
-ninth round, reads no version at all, so it never holds step 1's status and no
-tie can arise there. A server checking after the version word holds both
-verdicts at the same moment, which is the case the tie-break is about. A server
-whose refusal turns on `service` cannot reach one before step 11. §4 used to put
-every request-independent refusal before the whole order, which covered the
-first two positions alike and left the tie-break describing a case that could
-not occur.
+What it does next is a choice of three, and each buys something. Closing without
+replying is the only one that says nothing, so a server unwilling to disclose
+the refusal takes it. Answering at once in the server's own version costs
+nothing and tells a client configured for that version why it was refused.
+Waiting a bounded interval for `ludsa_version_major` buys an answer the client
+can parse whatever version it speaks, at the cost of holding a connection open
+for a peer already refused.
 
-That removes most of the choice rather than all of it, which is the right
-amount. Where a server reaches both verdicts together it may answer either, and
-nothing
-turns on which the client hears: a peer that is neither permitted nor speaking a
-version this server implements is misconfigured twice, and both answers send
-someone to look at a configuration file. What the rule removes is the case that
-had no reason behind it, where one verdict was available well before the other
-and the server answered the later one because of where its check happened to
-sit.
+**Why the specification ranks none of them and the guidance does.** Which one is
+right depends on how loaded the server is, and load is not something a wire
+specification can observe. In the ordinary case the third is the one to take.
+The client learns why it was refused, in a version it can parse, and a client
+still writing a credential is not cut off mid-write. A bounded interval and a
+discard loop are cheap against that.
 
-The three positions survive because each buys something. Accept is the cheapest
-and the only one at which saying nothing is still open, so a server unwilling to
-disclose the refusal checks there.
+What the ordinary case does not cover is a server under pressure from the
+refusals themselves. An unauthorised peer opening many connections is the shape
+that turns each of those accommodations into a per-connection cost: an interval
+held, and a discard loop run, for peers the server has already decided not to
+serve. Closing at once is how a server sheds that, and it has to be available
+without qualification, or a server would have no conforming way out of
+exhaustion.
 
-**Why a refusal at accept reads nothing.** The ninth round found §5's accept
-bullet citing §2's bounded interval, which §2 asks a server to allow before it
-answers in its own major version. Both reviewers proposed making the bullet
-match §2. The author reversed it. §2's reason for the interval is that a client
-about to send is better answered in its own version, and that presumes a peer
-worth accommodating. A server that has just refused one on its credentials has
-decided the connection is untrusted, and allowing the interval means parsing
-octets from that connection to decide what the refusal looks like. So §2 gained
-the exception rather than §5 gaining the wait.
+So the first answer is neither the recommendation nor an oversight. It is the
+fallback, and a deployment reaching for it under load is doing the right thing.
+The same reasoning is why the drain here is a MAY where §3's is a MUST: §3's
+binds a server that rejected a message, which is a peer it was willing to serve,
+and this one does not.
 
-The prohibition is on reading after deciding to refuse, not before. A server
-that reads `ludsa_version_major` and checks afterwards has parsed nothing it had
-already refused, which is why the second position survives unchanged.
+**Why reading a version is safe once the refusal is settled.** The ninth round
+first forbade it. Both reviewers had proposed making §5's accept bullet defer to
+§2's bounded interval, and the author reversed that: a server which has refused
+a peer must not parse octets from it to decide what the refusal looks like. The
+prohibition went further than its reason. What the reason forbids is letting a
+refused peer change the answer, and a version word read to choose an encoding
+changes nothing. The status is `PEERCRED_DENIED` whatever arrives, whatever
+version it names, and whether or not anything arrives at all.
+
+That displacement is why neither `VERSION_UNSUPPORTED` nor `REQUEST_TIMEOUT`
+surfaces here. Both describe something the peer did after the refusal was
+settled, and reporting either sends an operator to the wrong configuration file.
+A peer that is refused and also speaks an unimplemented version is misconfigured
+twice; the refusal is the one worth reporting, because it is the one that would
+still refuse if the version were fixed.
 
 A drain is a separate question and the answer falls out. §3's drain binds a
-server that rejected a message, and a refusal at accept precedes any message, so
-none is owed. A server may still read and discard, which is what keeps a client
-from being cut off mid-write, and it must not parse what it reads. It therefore
-holds no length it may rely on, and §3 already says the declared-length
-terminator does not apply where a server has none. The version word is the
-earliest point at
-which an answer can go back in the version the client chose, which is why it is
-the recommendation for a server with nothing else to wait for. Reading the
-request is what a per-`service` peer rule requires, and that rule is a real
-deployment rather than a hypothetical.
+server that rejected a message, and this refusal precedes any message, so none
+is owed. A server may still read and discard, which is what keeps a client from
+being cut off mid-write, and it parses nothing beyond `ludsa_version_major`. It
+therefore holds no length it may rely on, and §3 already says the
+declared-length terminator does not apply where a server has none.
 
-An earlier draft of this entry justified the third position by saying it lets a
-server compare the process id the kernel attests against the one the request
-claims. That is wrong. The kernel's credentials are readable at accept and can
-be kept, so a server may check the user id immediately and compare process ids
-later; the comparison needs the request and the allowlist check does not.
+**Why a per-`service` peer rule still has somewhere to sit.** A deployment whose
+rules govern which peers may reach which `service` values cannot settle that at
+accept, because the `service` arrives in the request. Its credentials check
+still happens at accept, which is what the rule above requires. What waits is a
+second gate at §4's step 11, and `PEERCRED_DENIED` answers that one too, since
+it is still the connecting peer being refused. A request too malformed to yield
+a `service` never lets it decide, so the framing status is the only answer it
+has.
+
+An earlier draft justified a later check by saying it lets a server compare the
+process id the kernel attests against the one the request claims. That is wrong
+as a reason to delay. The kernel's credentials are readable at accept and can be
+kept, so a server checks the user id immediately and compares process ids later.
+The comparison needs the request and the allowlist check does not.
 
 The name puts the subject first, where the result codes in §6.2.1 put the verb
 first. That is deliberate. `PEERCRED_DENIED` is a status in §5 and refuses a
