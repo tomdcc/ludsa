@@ -849,10 +849,9 @@ response codes goes to the server.
 
 `REQUEST_MALFORMED` means the sender produced something §3 forbids it to send:
 invalid structure, a value its type rules reject, a field above its §3.1
-maximum, or a tag its declared version does not define, which §4 leaves a
-receiver free to reject or to skip. A message that stopped early is
-`REQUEST_INCOMPLETE` instead, because a
-peer that crashed or was killed produced a short message with no defect in its
+maximum, or an unrecognised tag that §3.3 and §4 have the receiver reject rather
+than skip. A message that stopped early is `REQUEST_INCOMPLETE` instead, because
+a peer that crashed or was killed produced a short message with no defect in its
 encoder. `REQUEST_INCOMPLETE` covers a message that ended before its declared
 length, and one that ended before it declared a length at all.
 

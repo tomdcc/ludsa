@@ -914,8 +914,10 @@ of it rather than the only statement of it.
 **What a receiver may do about a breach.** The question arrived the day the rule
 went in: should a receiver that knows the sending version reject a tag that
 version does not define? The first answer was no, on three grounds, and it was
-too tight. The rule now says a receiver MAY reject where it implements the
-declared version, and MUST skip where it does not.
+too tight. The rule now turns on the tag's field number: at or below the highest
+number the receiver's version assigns for that message type it MUST reject, and
+above that it skips, with a MAY to reject instead where it implements the
+declared version.
 
 The three grounds, and what happened to them. *A receiver could apply the check
 only against a version it already implements, so it polices some peers and not
