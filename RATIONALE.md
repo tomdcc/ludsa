@@ -548,13 +548,32 @@ and a draining server consumes it while a closed one gives `EPIPE`.
 length out of play there, so the case tests the drain rather than which length a
 server may rely on.
 
-**Why that phrase now has a definition.** It governed a terminator and appeared
-three times unexplained, with one worked instance. The eighth round asked the
-question it could not answer: is a length that failed the bounds check one a
-server may rely on? A client declaring 3 octets and then writing four kilobytes
-draws a three-octet discard and a close from one server and a full drain from
-another, and the first leaves a peer taking `EPIPE` mid-write, which is the one
-thing the drain exists to prevent.
+**Why stopping at the declared length is a permission and not a terminator.**
+It sat in the list of things the drain stops at, headed "the earliest of these",
+and the guidance told a server it could ignore it. Both reviewers reached that
+bullet in the ninth round from opposite sides: one that its counting basis was
+unstated where the bullet beside it stated one, the other that the guidance
+contradicted a MUST.
+
+The guidance was right and the rule was wrong. The drain exists to keep a peer
+from being cut off mid-write, so reading longer serves its purpose rather than
+defeating it, and three bounds already stop it: end of file, `2 x MAX_LENGTH`,
+and §2's deadline. The declared length adds no bound the drain needs. It saves a
+server some time on the paths where it may rely on the number, and a list headed
+"the earliest of these" was the wrong place to say so.
+
+Stating the counting basis costs a clause and settles the other half. Once
+stopping early is optional, a server reading either way conforms and both are
+bounded, so the ambiguity stops mattering; a server that does stop still needs
+to know when.
+
+**Why that phrase now has a definition.** It governed when a drain may stop
+early and appeared three times unexplained, with one worked instance. The eighth
+round asked the question it could not answer: is a length that failed the bounds
+check one a server may rely on? A client declaring 3 octets and then writing
+four kilobytes draws a three-octet discard and a close from one server and a
+full drain from another, and the first leaves a peer taking `EPIPE` mid-write,
+which is the one thing the drain exists to prevent.
 
 So a length is worth acting on where the server read it under a major version it
 implements and where it passed the bounds check. A number that failed that check
@@ -1577,8 +1596,8 @@ A drain is a separate question and the answer falls out. §3's drain binds a
 server that rejected a message, and this refusal precedes any message, so none
 is owed. A server may still read and discard, which is what keeps a client from
 being cut off mid-write, and it parses nothing beyond `ludsa_version_major`. It
-therefore holds no length it may rely on, and §3 already says the
-declared-length terminator does not apply where a server has none.
+therefore holds no length it may rely on, and §3 already says its permission to
+stop early does not apply where a server has none.
 
 **Why a per-`service` peer rule still has somewhere to sit.** A deployment whose
 rules govern which peers may reach which `service` values cannot settle that at

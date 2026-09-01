@@ -305,12 +305,17 @@ A server that rejects a message before it has read all of it MUST NOT allocate
 storage for the body. It MUST send its response, then read and discard until the
 earliest of these, and MUST then close:
 
-- it has consumed the declared length, where it read one it may rely on;
 - it reaches end of file on the read direction;
 - it has read `2 x MAX_LENGTH` octets from the connection in total, counting the
   envelope and everything already read before it rejected;
 - §2's accept-to-complete-request deadline expires;
 - a shorter bound it set on the drain expires. A server MAY set one.
+
+Where it read a declared length it may rely on, it MAY stop once it has consumed
+that many octets of the body, counting what it read before it rejected. That is
+an optimisation rather than a terminator. A server that reads on to one of the
+bounds above conforms, and drains at least as long, which is the direction this
+section's purpose points.
 
 §2's deadline runs on through the drain, since the request it bounds never
 completed, and it is what guarantees the drain ends. Its expiry here means
@@ -332,8 +337,8 @@ it to `REQUEST_TIMEOUT`.
 
 A length a server may rely on is one it read under a major version it
 implements, and which passed §4's step 2: within `MAX_LENGTH` and not below the
-minimum for the version. Where it has none, the declared-length terminator does
-not apply and the rest do.
+minimum for the version. Where it has none, the permission above does not apply
+and the bounds do.
 
 A server answering `VERSION_UNSUPPORTED` has none, since §3 puts everything
 after the version word inside the major version the message declares, so it
@@ -863,8 +868,8 @@ was settled before either could arise and nothing the peer sends can change it.
 Such a server owes no drain, since §3's binds a server that rejected a message
 and this refusal precedes any. It MAY read and discard so that a client still
 writing is not cut off mid-write, and parses nothing beyond
-`ludsa_version_major`. It holds no length it may rely on, so §3's
-declared-length terminator does not apply and the rest do.
+`ludsa_version_major`. It holds no length it may rely on, so §3's permission to
+stop early does not apply and its bounds do.
 
 A server whose rules also govern which peers may reach which `service` values
 has a second gate. It cannot close that one before it has read a `service`. Its
@@ -1519,10 +1524,10 @@ write, so this case detects a server that closed rather than one that did not
 drain. Whether a drain ran is not observable from outside, which is what F4
 concedes for the bound.
 
-The remaining terminators are ruled out by construction. §3 puts the declared
-length out of play for `VERSION_UNSUPPORTED`, the driver does not half-close, so
-there is no end of file, and an envelope plus a kilobyte is far below
-`2 x MAX_LENGTH`.
+The remaining bounds are ruled out by construction. §3 puts the declared length
+out of play for `VERSION_UNSUPPORTED`, so the permission to stop early is not
+available either; the driver does not half-close, so there is no end of file;
+and an envelope plus a kilobyte is far below `2 x MAX_LENGTH`.
 
 A driver checks the encoding of every response it receives: tags in ascending
 order, and each recognised tag appearing at most once. Where a response declares
