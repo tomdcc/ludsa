@@ -694,6 +694,14 @@ this order has run. A server that refuses there and then waits for
 reach which `service` values cannot settle that second question before step
 11.
 
+§2's check for octets beyond the declared length is not one of these steps
+either. Those octets lie outside the message (§3), so the check concerns the
+connection rather than the message, and a receiver may observe them at any
+point. Where it observes them before it has written its response, §2's SHOULD
+reaches whatever outcome this order had produced, the decision included. Where
+it observes them afterwards it has already answered, and §2 has a server send
+one response to a connection.
+
 Step 4 checks only what a receiver can check without knowing which schema
 applies. A tag equal to the tag before it is a repeat, which step 7 judges
 against the schema. Steps 7 to 10 need the schema that `msg_type` selects, and

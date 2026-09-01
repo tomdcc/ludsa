@@ -108,6 +108,26 @@ nothing has been said. A bare connect carries no request, and the common thing
 that produces one is a port scan, so an answer would go to something that asked
 nothing.
 
+**Where the excess-octet check sits in §4's order.** It sits nowhere in it, and
+the ninth round had to say so. §4 opens by promising that a message failing more
+than one check takes the outcome of the earliest, which gave a reviewer a
+question the document could not answer: does a server that notices stray octets
+after reaching a decision still answer `REQUEST_MALFORMED`?
+
+Most of what looks unsettled there was settled on purpose. Detection is not
+required to be exhaustive, and §7 gives the case no expected outcome, so a
+server that never looks and one that looks early already answer differently and
+both conform. What was left was narrower, and the window is small: §3 has a
+server send one response to a connection, so the question lives only between
+reaching an outcome and writing it.
+
+The answer follows from where the octets are. §3 puts them outside the message,
+so the check is about the connection rather than about the message, which is the
+same reason §5's peer check is not one of the steps either. A check that is not
+part of the order does not slot into it: a receiver that observes them before it
+has answered rejects on them whatever the order had produced, and one that
+observes them afterwards has already answered.
+
 **Why detecting excess octets is optional but rejecting them is not.** These are
 different questions. Whether a client or server notices octets past the declared
 length depends on timing, because they may not have arrived yet. What it does
