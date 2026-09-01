@@ -11,6 +11,42 @@ vectors are what expose them. Each one says so where it applies.
 
 ## 2. Transport
 
+**Why the socket path must be absolute and must not be truncated.** §2
+legislates the path in detail and said nothing about either, which the ninth
+round found.
+Both produce the same failure, and it is the one §2's peer-identity rule exists
+to close: a client connects successfully to something other than the server.
+
+A relative path resolves through ordinary pathname lookup against the calling
+process's working directory, since the socket calls have no directory argument.
+That directory belongs to the host process a client is loaded into. A PostgreSQL
+backend has moved to its data directory and a daemon has usually moved to the
+root, so the same configured string names different sockets on different hosts,
+and can name different ones in one process either side of a `chdir`.
+
+Truncation is the same failure by another route. The path travels inside a fixed
+array in the address structure, and the natural C spellings shorten it without
+saying so. A shortened path is still a valid path: it names nothing, which is
+harmless, or it names a different socket, which is not, and no error
+distinguishes either from success. The rule is therefore that a side establishes
+the path fits before it calls, rather than only that it must not truncate.
+Neither `bind` nor `connect` reports the condition afterwards.
+
+The rule states a property rather than a number, for the reason §2's socket mode
+states a bound rather than a value. The size is a platform fact and it varies
+more than two ways: Linux and Solaris carry 108, the BSDs and macOS 104, and AIX
+1023. A normative 108 would make an implementation on a smaller platform
+conforming and broken. It is not even a single number within a platform, since
+portable practice leaves room for a terminator and the usable length is one
+less.
+
+The two sides configure their paths independently and need not share a string. A
+volume mounted at different points gives one socket two names, and neither side
+reads the other's, so each validates its own path against its own platform. That
+also disposes of any cross-platform concern: a socket is a kernel object, so
+both peers are talking to the same kernel and see the same limit, and they would
+not care if they did not.
+
 **Why unix sockets only, and pathname sockets at that.** The credential crosses
 this channel in cleartext, and filesystem permissions are the only access
 control the protocol relies on. TCP on loopback would put it on a channel with

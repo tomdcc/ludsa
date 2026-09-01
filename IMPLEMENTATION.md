@@ -1052,6 +1052,63 @@ prescribe it. The floor costs latency on every denial, the work costs load, and
 which matters depends on the traffic. What is worth stating is that choosing
 `AUTHN_DENIED` for its discretion and then leaking through timing buys nothing.
 
+## The socket path
+
+§2 requires an absolute path, forbids truncating it, and has each side establish
+that its own path fits before it binds or connects. The size of the array the
+path travels in is a platform fact:
+
+| platform | `sun_path` | usable |
+|---|---|---|
+| Linux, Solaris | 108 | 107 |
+| macOS, FreeBSD, NetBSD, OpenBSD, DragonFly | 104 | 103 |
+| AIX | 1023 | 1022 |
+
+Read from Go's generated type files on 2026-09-01, which are produced from each
+platform's own headers. Only the macOS row was exercised on this machine, where
+a path of 103 bound and one of 104 did not.
+
+**Derive the maximum rather than hardcoding it.** `sizeof(((struct sockaddr_un
+*)0)->sun_path) - 1` in C, `len(syscall.RawSockaddrUnix{}.Path) - 1` in Go, both
+compile-time constants needing no cgo and no `unsafe`. The spread above is why:
+a two-value assumption is wrong on AIX and on Solaris, and the next platform is
+not a value anyone has.
+
+**A C string literal naming the number is available, at a cost.** The
+preprocessor cannot stringify `sizeof`, since it runs first, so
+`STR(sizeof(...))` yields the text of the expression. What works is a literal
+per platform with a `_Static_assert` against `sizeof`, which fails the build
+where the assumption is wrong. That gives `ludsa_strstatus()` a message naming
+the maximum with no allocation, and it costs a platform list to maintain. An
+accessor returning the derived value costs nothing and lets the caller format;
+for the client that caller is `pam_ludsa`, which owns `pam_syslog`.
+
+**Neither language reports the condition for you.** `strncpy` truncates with no
+signal at all. `snprintf(addr.sun_path, sizeof addr.sun_path, "%s", path)`
+returning `>= sizeof addr.sun_path` is the detection idiom where you have not
+checked in advance. Go does not truncate, which is the safe half, but returns
+`EINVAL`, surfacing as `bind: invalid argument` with no length in it. That is
+the whole reason §2 makes the check prior: the syscall cannot tell an operator
+what went wrong.
+
+**Treat `EINVAL` from `bind` or `connect` as authoritative anyway.** A binary
+compiled against one platform's headers can run under another's kernel:
+FreeBSD's Linux compatibility layer and illumos LX zones both do this, and a
+Linux-built client there believes 107 while the kernel may enforce 103. No
+compile-time technique catches that, because both the `_Static_assert` and the
+`sizeof` accessor were correct against the headers they saw. Check for the
+message, and let the syscall have the last word. **Unverified**: that these
+layers enforce the host's limit rather than translating to the guest's has not
+been measured here, and belongs in the Docker harness beside the
+`PAM_MAX_RESP_SIZE` figures.
+
+**Relative paths and the working directory.** There is no `bindat` on Linux and
+`net.Listen` takes a path and nothing else, so `chdir` is the only route to
+directory-relative semantics, and the working directory is process-global. A
+library that changes it is mutating state shared with the host process and
+racing every other thread, which is the objection that keeps
+`signal(SIGPIPE, SIG_IGN)` out of `libludsa` too.
+
 ## Peer credentials
 
 §2 binds a client that was configured with an expected server identity. It must

@@ -188,7 +188,24 @@ nowhere and admits whoever the extra bits admit.
 none configured MUST fail to start, and MUST NOT fall back to its own primary
 group.
 
-**The socket path.** A server MUST refuse to start if the configured path exists
+**The socket path.** The configured path MUST be absolute. A relative one
+resolves against a working directory neither side controls, and a client loaded
+into a host process neither chooses that directory nor knows when it changes.
+Each side configures its own path, and the two need not be the same string: a
+volume mounted at different points gives one socket two names, and neither side
+reads the other's.
+
+A client or server MUST establish that its path is representable in full in the
+platform's socket address before it binds or connects, and MUST NOT truncate it
+to fit. Neither call reports the condition afterwards: a truncated path either
+names nothing or names a different socket, and both are indistinguishable from a
+correct one. A server whose path does not fit MUST fail to start. A client whose
+path does not fit MUST NOT connect, and reports the condition §7 names
+`CONNECTION_FAILED`. Each SHOULD name the maximum its platform allows in the
+diagnostic it emits, since that is what makes the failure actionable and neither
+side can learn it from the other.
+
+A server MUST refuse to start if the configured path exists
 and is not a socket, and MUST apply that test before it removes or replaces
 whatever is there. A stale socket MUST be gone from that path before the server
 publishes its own, whether the server unlinks it or replaces it atomically.
@@ -1559,6 +1576,19 @@ that sentence in the indicative rather than as a MUST, so the name is a
 client-local one under this section's usual terms and the prohibition on
 connecting is what binds. A client that omitted the field and sent the rest has
 failed it too, since the driver's socket then saw a connection.
+
+One further case observes a client configured with a path it cannot use, which
+§2's prohibition reaches and no message can. The driver configures the client
+with a path longer than its platform's socket address allows, which it reads
+from that platform rather than from this document:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | F7 |
+
+No fixture beyond F7 is needed, since every case driven against a client already
+configures it with a socket path. A client that truncated and connected fails,
+and so does one that connected to whatever the truncated path named.
 
 One further case observes the octets a client puts on the wire, which §3.2
 binds. The driver hands the client a `user` carrying leading and trailing
