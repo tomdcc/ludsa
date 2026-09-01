@@ -1509,7 +1509,10 @@ document does not specify. A driver MUST be given all of them:
   its policy does not map that credential's identity to. The policy must also
   refuse that identity a `user` of zero octets, which a deployment whose policy
   grants any `user` cannot supply. Such a peer cannot run the second decision
-  case and is not non-conforming for that.
+  case and is not non-conforming for that. It also says whether appending an
+  octet to that credential makes it invalid to the peer's backend. A backend
+  that accepts the modified value cannot run the credential case below and is
+  not non-conforming for that either.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
@@ -1706,6 +1709,26 @@ whitespace, and reads the request:
 A client that trims, folds case or re-encodes fails it. §3.2's rule names no
 field; `user` is what the case drives, because §6.2 has a server's decision turn
 on it.
+
+One further case observes the octets a server acts on, which §6.2 binds it to as
+well: the rule there reaches the server and not only the sender. The driver
+takes a credential the peer accepts, appends a newline, and sends it under a
+`service` the server recognises:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A credential the peer accepts, with a trailing newline appended, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+
+A server that trims the credential before validating it answers `OK` and fails.
+Which denial it names is its own choice (§6.2): one that discloses no reason
+answers `AUTHN_DENIED`, and one that does answers `AUTHN_DENIED_CREDENTIAL`,
+since the value it was handed did not validate. Naming the codes by their prefix
+rather than requiring one of them is what leaves that choice open.
+
+No wire-level input reaches this rule. The octets are well formed either way,
+and what differs is what the server did with them before it decided, which is
+why F3 has to say whether the appended octet makes the credential invalid to the
+peer's backend.
 
 One further case observes a client whose peer closes while it is still writing,
 which §2.1 requires it to survive and §2 permits the server to do. The driver

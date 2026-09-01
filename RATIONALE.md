@@ -2377,6 +2377,35 @@ It is affordable because the client-side harness already does it. The PAM
 measurement that settled how a token reaches the module is a conversation with a
 chosen token, so an oversized one is the same mechanism with a different value.
 
+**Why the verbatim rule needed a case on the server side too.** The rule binds
+both parties in one sentence, and §7 tested one of them. The driver hands a
+client a `user` with whitespace around it and reads the wire, and nothing did
+the same for a server and a credential. The tenth round found the gap, and it is
+the gap that matters most: this is the rule `IMPLEMENTATION.md` calls the worst
+failure mode in the protocol, because a server that trims on receipt is
+self-consistent. Its reference backend reads stored credentials a line at a time
+and has already lost the terminator, so both sides of its comparison are
+trimmed; its wire vectors pass because they test the codec against fixed bytes
+and never reach the handler. Everything it owns goes green, and it disagrees
+with every other implementation about which tokens are valid.
+
+The case is a credential the backend accepts with an octet appended, expecting a
+denial. A trimming server answers `OK`. The expectation names the `AUTHN_DENIED`
+codes rather than "not `OK`" for the reason the decision cases do: a server
+holding no such service answers `SERVICE_UNSUPPORTED`, which is not `OK` and
+reaches no decision, so the looser wording would pass a peer that never examined
+a credential. That formulation was ruled out in the seventh round and the
+reviewer's proposal reintroduced it.
+
+It sits beside the client-side case rather than with the decision cases, whose
+lead-in says they are the only test of a different rule in the same section. A
+third row there would have made that sentence false.
+
+F3 carries the fact the case turns on, which is whether appending an octet
+actually invalidates the credential for that backend. For a signed token it
+does. A backend that ignores trailing whitespace on its own account cannot run
+the case, and the concession says so, on the same terms F2, F5, F8 and F10 use.
+
 **Why the mid-write case asks a client to write badly on purpose.** §2.1's rule
 is the one whose violation kills an `sshd`, and the tenth round found its only
 case unable to exercise it. The case had the driver read part of the request and
