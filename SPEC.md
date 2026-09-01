@@ -84,9 +84,20 @@ drain.
 client's; this is the same move where it has not been given one.
 
 Having read it, the server sends a response whatever the request turns out to
-be. It replies in its own major version when it does not implement the
-client's. It closes without replying only when writing fails, or when a fault
-after it has begun writing leaves it unable to finish the response it started.
+be. It replies in its own major version when it does not implement the client's.
+
+This document does not enumerate the cases where a server says nothing instead.
+§5 defines one, a server that refused the peer on its credentials. The rest are
+a server's judgement and a deployment's policy, which reach further than this
+document can: one may decline to spend anything further on a caller it has
+already ruled out, and one shedding load may decline to wait for a version word
+it has no capacity to act on. A client cannot separate them, and learns only
+that no response arrived and the connection ended, which §7 names
+`RESPONSE_ABSENT`. It learns nothing about why, and nothing about whether the
+server read its request at all.
+
+What binds a server is the other end of it. Having begun writing a response it
+finishes it, unless writing fails or a fault leaves it unable to.
 
 **The server closes after it responds.** Having written its response the server
 MUST shut down its write direction (`shutdown(SHUT_WR)`, `CloseWrite()`), and

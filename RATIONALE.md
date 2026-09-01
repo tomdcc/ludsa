@@ -360,6 +360,30 @@ a second deadline and not one of §3's drain terminators, so its expiry left a
 drain owed on a connection the server had just stopped reading, and §2's request
 deadline bounds the same set of clients without that consequence.
 
+**Why §2 stopped enumerating when a server may say nothing.** It used to close
+the list: having read the version word, a server closed without replying "only"
+when writing failed, or when a fault after it had begun writing left it unable
+to finish. §5 then let a server that refused the peer on its credentials say
+nothing at all, and read and discard so as not to cut a client off mid-write,
+which reads the version word on the way. The tenth round found the two in
+contradiction on the path `IMPLEMENTATION.md` recommends.
+
+Extending the list was the obvious repair and it was the wrong one. The reasons
+a server says nothing are not the protocol's to hold: one may decline to spend
+anything further on a caller it has already ruled out, and one shedding load may
+decline to wait for a version word it has no capacity to act on. Those are a
+server's judgement and a deployment's policy, and a client cannot separate them
+from each other or from a breach. It sees no response and a closed connection,
+which is `RESPONSE_ABSENT` whatever produced it.
+
+So the enumeration went and the obligation stayed. A server answers once it can,
+and what still binds it is the far end: having begun writing a response it
+finishes it. That much a client can act on, because a response that stops
+part-way is a fault it can name. Which is the same lesson as the counts rule
+elsewhere in this document, arriving at a MUST instead of at a number: a closed
+list is a claim about every case, and this one had already been outgrown twice
+before anyone noticed it was a claim at all.
+
 **Why the request deadline needed qualifying.** The unqualified sentence told a
 server to answer `REQUEST_TIMEOUT` whenever the deadline expired, including
 before two octets had arrived, which the paragraph above it forbade. §7 case 19
@@ -1637,7 +1661,8 @@ implementations rather than a rule, and it was not true of the deployment
 `IMPLEMENTATION.md` recommends: a server that checks after reading
 `ludsa_version_major` is the only one whose refusal reaches the client's log at
 all. Beside it sat an unconditional permission to close without replying, which
-§2 forbids from the moment the version word is read.
+the §2 of the time forbade from the moment the version word was read. The tenth
+round removed that prohibition, and the entry above says why.
 
 The seventh round replaced that with silence: three positions, all permitted,
 nothing said about choosing between them. The eighth round found what the
