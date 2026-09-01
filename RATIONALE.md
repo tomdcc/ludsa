@@ -85,6 +85,38 @@ Numbers are a tuning decision belonging to a deployment, and freezing them into
 a normative document would make a server under load unable to defend itself
 without becoming non-conforming.
 
+**Why there is no separate bound on waiting for the version word.** Earlier
+drafts had a server allow a short interval for it before answering in its own
+major version, so that a client about to send got an answer in its own version.
+The ninth round removed the interval and left the request deadline as the only
+bound.
+
+The interval was a second deadline that was not one of §3's drain terminators,
+and that is what made it costly. When it expired, §2's request deadline was
+still running, so a drain was owed on a connection whose read side a server had
+just given up on. In Go that is not merely awkward: the read deadline latches,
+so the drain cannot run at all, and the guidance told a server not to reset it.
+A server following both documents skipped a drain it owed, and §7 cannot catch
+that, since whether a drain ran is not observable from outside.
+
+Removing it costs nothing, because the wait it bounded is not a real wait. A
+client holds everything it will send before it connects, the transport is a unix
+socket, so writing involves no network, and the version word is two octets that
+always fit in a socket buffer. Nothing but scheduling delay can hold it up, and
+a client too starved to produce two octets will not produce a whole request
+within the deadline either. So the request deadline bounds the same set of
+clients the interval did, and its expiry is already a drain terminator, which is
+what makes the in-flight question disappear rather than get answered.
+
+A server that cannot afford to wait has two answers that were always there: it
+may answer in its own major version at once, or stop accepting and leave
+connections in the backlog. Neither needs a second deadline.
+
+§5's peer refusal keeps a bound of its own, and that is consistent rather than
+an exception. The hazard was never a shorter bound; it was a shorter bound where
+a drain is owed. A server refusing the peer owes none, so nothing is left in
+flight for the bound to strand.
+
 **Why a server answers `UNAVAILABLE` as soon as it knows.** The obligation is on
 promptness rather than on holding a timer. A backend that returns an error at
 200ms should not leave the server sitting on the connection until some deadline
@@ -1490,7 +1522,8 @@ and this one does not.
 
 **Why reading a version is safe once the refusal is settled.** The ninth round
 first forbade it. Both reviewers had proposed making §5's accept bullet defer to
-§2's bounded interval, and the author reversed that: a server which has refused
+the bounded interval §2 then carried, and the author reversed that: a server
+which has refused
 a peer must not parse octets from it to decide what the refusal looks like. The
 prohibition went further than its reason. What the reason forbids is letting a
 refused peer change the answer, and a version word read to choose an encoding

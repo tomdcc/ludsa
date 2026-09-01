@@ -43,15 +43,22 @@ implementation, and invisible in any test where the deadline never fires.
 deadline fires, `io.CopyN(io.Discard, conn, ...)` returns
 `os.ErrDeadlineExceeded` having read nothing, so the §3 drain never runs. Do not
 reset the read deadline to make it run. §3 lists that deadline among the drain's
-terminators, so on the `REQUEST_TIMEOUT` path it had already expired and no
-drain was owed: the server writes its status and closes. Resetting it lets the
-one client that already used its whole deadline hold the connection for a second
-one.
+terminators, so wherever it has expired no drain was owed: the server writes its
+status and closes. Resetting it lets the one client that already used its whole
+deadline hold the connection for a second one.
 
 Every other early rejection is settled while the deadline still runs, so the
-drain there is a normal read and `io.CopyN` behaves. This is the only path where
-the two rules meet, and the tell is that a server "fixing" the latch drains on
-exactly the exchange with least claim to it.
+drain there is a normal read and `io.CopyN` behaves. The tell is that a server
+"fixing" the latch drains on exactly the exchange with least claim to it.
+
+**Do not invent a shorter deadline for the version word.** Setting one, and
+answering in your own major version when it fires, reads as a courtesy to a
+loaded server. It is the one shape that makes the latch wrong: the short
+deadline expires, the read direction latches, and §2's request deadline is still
+running, so a drain is owed and cannot run. §2 defines no such bound for that
+reason. Where you cannot afford to wait, answer in your own major version at
+once or stop accepting, both of which §2 gives you. §5's peer refusal may set a
+bound of its own, because it owes no drain either way.
 
 **Keep the request deadline and the dependency deadline apart.** They are
 sequential phases of one exchange and must not share a `context`. One

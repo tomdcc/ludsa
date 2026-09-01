@@ -72,12 +72,14 @@ the server closes without replying, whether it received no octets at all or
 fewer than that value needs.
 
 **Answering without one.** A server that has decided to answer but has not read
-`ludsa_version_major` MAY answer in its own major version instead of closing.
-Before it does, it SHOULD allow the client a bounded interval to supply one,
-because a client that is about to send is better answered in its own version.
-§5 is the exception. A server refusing the connection on the peer's credentials
-MAY answer at once without allowing any interval, and where it allows one it
-answers `PEERCRED_DENIED` whether or not a version arrives.
+`ludsa_version_major` MAY answer in its own major version instead of closing. It
+MAY instead wait for the version word and answer in the version the client
+chose, which is the better answer where it can afford to wait. The request
+deadline is the only bound on that wait: this document defines no shorter one,
+because a shorter one would expire while the request deadline still ran and
+leave a server holding a drain it owed. §5 sets its own bound, and owes no
+drain.
+
 §4 already has a server reply in its own major version when it cannot use the
 client's; this is the same move where it has not been given one.
 
@@ -128,9 +130,10 @@ answered yet.
 The server SHOULD bound concurrent connections. At its limit it MAY respond
 `RATE_LIMITED`, and MAY instead stop accepting and leave connections in the
 kernel backlog. The limit is reached at accept, before any octet has arrived, so
-a server that chooses to answer reads `ludsa_version_major` first. Where the
-client supplies none within a bounded interval, it MAY answer in its own major
-version. §3's drain covers what it did not read.
+a server that chooses to answer reads `ludsa_version_major` first, or answers in
+its own major version without waiting for one. Where it waits and the request
+deadline expires, that deadline is among §3's drain terminators, so it closes
+and owes no drain.
 
 **Connect-time retry.** A client MAY retry a connection that failed for a reason
 a later attempt could change: `ECONNREFUSED` and `ENOENT`, because the server
@@ -830,7 +833,8 @@ A server whose check fails does one of three things:
 - closes the connection without replying;
 - answers `PEERCRED_DENIED` at once in its own major version, having read
   nothing;
-- waits a bounded interval to read `ludsa_version_major`, and answers
+- waits a bounded interval of its own choosing to read `ludsa_version_major`,
+  and answers
   `PEERCRED_DENIED` in the version the client declared.
 
 The third reads a version to choose an encoding and for nothing else. A version
