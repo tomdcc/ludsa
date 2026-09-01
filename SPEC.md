@@ -432,6 +432,19 @@ rest, because a request without it asks something other than what its host
 application asked. Dropping a field, or shortening a value, is the host
 application's decision, and it makes it with the report in hand.
 
+A server with a value to carry in a field, and no way to carry it within that
+field's maximum, answers `INTERNAL_ERROR` (§5). It MUST NOT truncate the value,
+and MUST NOT omit the field in its place. Where this document lets a server omit
+an optional field, the permission is about having no value to send rather than
+about having one that does not fit, and a client deployed to expect the field
+cannot tell those apart. `error_detail` is the exception: a server composes that
+value, so §5 has it shorten what it embeds and the message still goes.
+
+No maximum here is set where an ordinary value approaches it, so a server that
+meets one has a fault of its own to report rather than a request it can answer.
+That is what `INTERNAL_ERROR` is for: waiting will not change it and someone
+needs to look (§5).
+
 `error_detail`, `server_desc` and `authn_id` are the only fields in this table
 that a server sends and a client receives. A defect in any field a server sends
 is a fault in the server that produced it, so a client MUST NOT report a
@@ -1181,10 +1194,14 @@ Response:
 `authn_id` is the canonical identity the server resolved, for example
 `system:serviceaccount:app:web`. A client that cannot use it ignores it. A
 server MAY omit it whether or not the request carried a `user`, and version 1.0
-gives a client no way to require one. A client that omits `user` and cannot
-derive the identity from the credential therefore depends on being deployed
-against a server that supplies `authn_id`. That is an arrangement between a
-client and a deployment, not something the protocol settles.
+gives a client no way to require one. That permission is about a server with no
+identity to send. One that resolved an identity it cannot carry within the
+field's maximum does not omit it, and §3.1 says what it answers instead.
+
+A client that omits `user` and cannot derive the identity from the credential
+therefore depends on being deployed against a server that supplies `authn_id`.
+That is an arrangement between a client and a deployment, not something the
+protocol settles.
 
 Within one `service`, a server SHOULD carry the same optional fields on every
 AUTHENTICATE response it sends with the same `result`, whatever path it took to

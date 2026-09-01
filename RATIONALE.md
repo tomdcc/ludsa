@@ -900,6 +900,30 @@ every authentication against a client that reads the field, grants included.
 principals into one, the same collision hazard as truncating a role name, and
 silently grants whatever the shortened identity maps to.
 
+**Why a server that cannot carry a value answers `INTERNAL_ERROR`.** §3.1 bound
+both parties against emitting an over-long field and against truncating one. It
+then gave the escape hatch to the client alone. §5 gave the server one instance,
+for `error_detail`. That works because a server composes the value and can embed
+less of it. `authn_id` has no such route: the identity is the value.
+
+The tenth round first proposed letting the server omit the field, on the ground
+that every field a server sends is optional in its schema. The author overruled
+it, and the distinction is the one that matters here. Optional in the schema
+says only that some deployments extract no identity. It says nothing about a
+deployment that does, whose client is waiting for one. Such a server, omitting
+the field because it did not fit, tells that client nothing it can act on. §6.2
+leaves a client that sent no `user` unable to grant on a bare `OK`. The
+deployment fails and nothing says why.
+
+The permission to omit is therefore about having no value to send, never about
+having one that will not fit. The rule says so outright, since leaving it
+implied would ask a reader to work out which sense a MAY carries.
+
+No maximum here is set anywhere near an ordinary value, so a server meeting one
+has a fault rather than an answer. That is what `INTERNAL_ERROR` names: waiting
+will not change it and someone needs to look. Appendix B sends it to
+`PAM_SYSTEM_ERR`, the code that fetches a person.
+
 **Why 512 for `authn_id`.** A Kubernetes identity is `system:serviceaccount:`
 plus a namespace of at most 63 octets and an account name of at most 253, so
 339.
