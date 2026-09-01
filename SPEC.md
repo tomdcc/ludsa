@@ -212,7 +212,12 @@ group.
 
 **The socket path.** The configured path MUST be absolute. A relative one
 resolves against a working directory neither side controls, and a client loaded
-into a host process neither chooses that directory nor knows when it changes.
+into a host process neither chooses that directory nor knows when it changes. A
+server configured with a relative path MUST fail to start. A client configured
+with one MUST NOT connect, and reports the condition §7 names
+`CONNECTION_FAILED`. Neither resolves it against a working directory to find out
+what it names.
+
 Each side configures its own path, and the two need not be the same string: a
 volume mounted at different points gives one socket two names, and neither side
 reads the other's.
@@ -1525,6 +1530,11 @@ document does not specify. A driver MUST be given all of them:
   reaches. For a PAM client that is a conversation supplying a token. A client
   whose host cannot present the value a case names cannot run that case and is
   not non-conforming for that.
+- **F9**: whether the driver can set the working directory of the client under
+  test's host process. The relative-path case needs the driver's socket to sit
+  where a client that resolved its configured path would land, which the driver
+  arranges by choosing that directory. A client whose host cannot have one set
+  cannot run that case and is not non-conforming for that.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1654,6 +1664,21 @@ from that platform rather than from this document:
 No fixture beyond F7 is needed, since every case driven against a client already
 configures it with a socket path. A client that truncated and connected fails,
 and so does one that connected to whatever the truncated path named.
+
+One further case observes a client configured with a path §2 forbids for a
+different reason. The driver binds its socket in a directory of its choosing,
+sets the client's working directory to that directory (F9), and configures the
+client with the socket's basename alone:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A configured socket path that is not absolute | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | F9 |
+
+The second assertion is the one that separates the answers, and the driver's
+choice of directory is what gives it force. A client that resolves the path
+finds the driver's socket at the far end of it and connects. A driver that let
+the resolution land anywhere else would see no connection either way, and would
+pass a client that resolves alongside one that refuses.
 
 One further case observes the octets a client puts on the wire, which §3.2
 binds. The driver hands the client a `user` carrying leading and trailing

@@ -47,6 +47,23 @@ also disposes of any cross-platform concern: a socket is a kernel object, so
 both peers are talking to the same kernel and see the same limit, and they would
 not care if they did not.
 
+The ninth round wrote both rules and equipped only one. Truncation got a party
+on each side, a report name and a case. Absoluteness got a MUST on the
+configuration, which binds nobody: a configuration is not a party, so nothing
+said what a server does with a relative path or what a client reports for one,
+and two implementations could both claim conformance while one refused to start
+and the other published a socket at a name that meant something different to
+every client. The tenth round gave it the same equipment, on the ground that the
+two rules guard one failure and a rule with no party is one a conforming
+implementation may ignore.
+
+`CONNECTION_FAILED` rather than `INVALID_REQUEST`, for the same reason
+truncation takes it: §7 gives `INVALID_REQUEST` to the caller's own input, and a
+socket path is the deployment's configuration rather than anything the caller
+supplied. It carries the fall-through that Appendix B gives
+`PAM_AUTHINFO_UNAVAIL`, which the truncation rule already carried, so nothing
+new turns on it here.
+
 **Why a client must survive a write failing, after four rounds of declining
 it.** Every earlier proposal was a rule about signals, and every decline
 answered one: a specification reaching into process-global state is specifying a
@@ -2335,6 +2352,21 @@ way to reach it is to give the client such a value.
 It is affordable because the client-side harness already does it. The PAM
 measurement that settled how a token reaches the module is a conversation with a
 chosen token, so an oversized one is the same mechanism with a different value.
+
+**Why the relative-path case needs a fixture of its own.** F9 is the working
+directory the driver gives the client's host, and the case does not work without
+it. A relative path resolves somewhere, and if the driver does not choose where,
+it resolves to a name that holds nothing: the client gets `ENOENT`, reports
+`CONNECTION_FAILED`, and passes whether it refused the path or resolved it. Both
+assertions are satisfied by the behaviour the case exists to catch.
+
+The driver therefore binds its socket in a directory, puts the client's host in
+that directory, and configures the client with the basename. A client that
+resolves now lands on the driver's socket, so the assertion that no connection
+arrived is the one that fails it. The general shape is that a case against a
+client's path handling has to put the driver's socket where a non-conforming
+client would go, since a wrong path that names nothing is indistinguishable from
+a path never used.
 
 The report ends the case rather than a deadline. A driver waiting to prove a
 negative would have to decide how long a connection that is never coming takes

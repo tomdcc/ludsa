@@ -1128,6 +1128,11 @@ library that changes it is mutating state shared with the host process and
 racing every other thread, which is the objection that keeps
 `signal(SIGPIPE, SIG_IGN)` out of `libludsa` too.
 
+§2 settles what each side does rather than resolving one: a server fails to
+start and a client refuses to connect, reporting `CONNECTION_FAILED`. The test
+is on the configured string before any call, since a leading `/` is the whole of
+it, and neither `bind` nor `connect` reports the condition afterwards.
+
 ## Peer credentials
 
 §2 binds a client that was configured with an expected server identity. It must
