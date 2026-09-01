@@ -85,7 +85,8 @@ client's; this is the same move where it has not been given one.
 
 Having read it, the server sends a response whatever the request turns out to
 be. It replies in its own major version when it does not implement the
-client's. It closes without replying only when writing fails.
+client's. It closes without replying only when writing fails, or when a fault
+after it has begun writing leaves it unable to finish the response it started.
 
 **The server closes after it responds.** Having written its response the server
 MUST shut down its write direction or close the connection, except where §3 owes
@@ -1538,8 +1539,10 @@ out of play for `VERSION_UNSUPPORTED`, so the permission to stop early is not
 available either; the driver does not half-close, so there is no end of file;
 and an envelope plus a kilobyte is far below `2 x MAX_LENGTH`.
 
-A driver checks the encoding of every response it receives: tags in ascending
-order, and each recognised tag appearing at most once. Where a response declares
+A driver checks the encoding of every response it receives on §4's terms: no tag
+lower than the tag before it, and each recognised tag appearing at most once.
+Equal tags are not a breach, since §4.1 lets a later minor version assign a
+repeatable field. Where a response declares
 a `ludsa_version_minor` the driver implements, it also records a tag that
 version does not define for that message type, which is the sender breaking
 §3.2. It records rather than rejects: whether to reject is a receiver's own
