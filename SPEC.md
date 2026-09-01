@@ -223,6 +223,12 @@ every version of the protocol:
   independently. A client MUST NOT keep a connection or descriptor between
   requests. The protocol does not guarantee startup order, which is a deployment
   concern.
+- **A client survives what this document lets a server do.** A client MUST NOT
+  cause its host application to terminate as a result of a write to the socket
+  failing. §2, §3 and §5 each authorise a server to close a connection a client
+  is still writing to, so that write failing is a conforming exchange rather
+  than a fault, and a client is loaded into a host application it does not own
+  (§1). This binds nothing about how a client is built beyond that outcome.
 
 ## 3. Framing
 
@@ -1618,6 +1624,19 @@ whitespace, and reads the request:
 A client that trims, folds case or re-encodes fails it. §3.2's rule names no
 field; `user` is what the case drives, because §6.2 has a server's decision turn
 on it.
+
+One further case observes a client whose peer closes while it is still writing,
+which §2.1 requires it to survive and §2 permits the server to do. The driver
+accepts, reads part of the request, and closes:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| The connection closed while the client under test is still writing its request | client | the client reports `RESPONSE_ABSENT` | F8 |
+
+The driver needs a request large enough that the client is still writing when it
+closes, which F8's route supplies by handing it a `credential` near its §3.1
+maximum. What the case detects is a client whose host application did not
+survive the write failing, since that client reports nothing at all.
 
 One further case observes what a client does after it writes, which §2 requires
 of every client and no status reports. The driver accepts a connection, reads

@@ -299,8 +299,11 @@ kernel raises `SIGPIPE` and the default action terminates the process. In Go the
 runtime raises it only for file descriptors 1 and 2, so a write to a closed
 socket returns `EPIPE` as an ordinary error and nothing dies. A runtime that
 maps signals to exceptions gives you a third shape. The cause is one sequence
-and the manifestation is a property of the language, so a rule in the protocol
-would be written for one of them and wrong for the rest.
+and the manifestation is a property of the language, which is why §2.1 binds the
+outcome and says nothing about the mechanism: a client MUST NOT let its host
+application terminate because a write to the socket failed. Everything below is
+how to satisfy that in C, and in Go the rule costs nothing except that an
+unrecovered panic on a write error breaks it.
 
 **Suppress `SIGPIPE` per write, and leave the host's disposition alone.**
 Writing to a socket whose peer has closed raises `SIGPIPE` in C, whose default

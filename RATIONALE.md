@@ -47,6 +47,43 @@ also disposes of any cross-platform concern: a socket is a kernel object, so
 both peers are talking to the same kernel and see the same limit, and they would
 not care if they did not.
 
+**Why a client must survive a write failing, after four rounds of declining
+it.** Every earlier proposal was a rule about signals, and every decline
+answered one: a specification reaching into process-global state is specifying a
+library, and the same sequence raises `SIGPIPE` in C, returns `EPIPE` in Go, and
+takes a third shape in a runtime that maps signals to exceptions, so a rule
+would be written for one and wrong for the rest.
+
+The ninth round's proposal is about the outcome instead. It names no signal, no
+errno and no runtime. A C client satisfies it with `MSG_NOSIGNAL` or
+`SO_NOSIGPIPE`, a Go client by doing nothing, since its runtime raises the
+signal only for descriptors 1 and 2, and a runtime that maps signals to
+exceptions by catching. Where a client already gets it right the rule binds
+nothing, and a rule that is vacuous somewhere is not a rule that is wrong there.
+Go is not wholly exempt either: an unrecovered panic ends the process, so a
+client that panics on a write error breaks it.
+
+**The boundary is neither of the two this entry tried.** Observability failed
+because §5 binds a client's dealings with its host application twice with
+nothing on the wire to show for it. Provenance failed because §2 binds a client
+to apply deadlines, which concerns no value the protocol delivered. What
+separates this rule from allocator behaviour and threading is that the protocol
+authorises the condition: §2, §3 and §5 each let a server close a connection a
+client is still writing to, so the write failing is a conforming exchange rather
+than a fault.
+
+That also answers the objection that would otherwise sink it, which is the one
+that removed the format-string MUST: naming one condition implies the rest are
+safe. The rest are not conforming exchanges. No conforming server sends a
+malformed response, so a client dying on one is a library bug outside this
+document, where a client dying on a close this document permits is the document
+producing the crash.
+
+The client is not a peer that owns its own process. §1 has it loaded into a host
+application, and a PAM module is loaded into an `sshd` running as root rather
+than forked from it. A protocol that specifies that relationship and then
+authorises the peer to kill it has said something incomplete.
+
 **Why unix sockets only, and pathname sockets at that.** The credential crosses
 this channel in cleartext, and filesystem permissions are the only access
 control the protocol relies on. TCP on loopback would put it on a channel with
