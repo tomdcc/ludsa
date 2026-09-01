@@ -1242,10 +1242,18 @@ authentication path.
 
 The ninth round found §7 and §4 disagreeing here, §7 making the skip a MUST and
 §4 making it one of two conforming answers, so a conforming server failed the
-conformance suite. Deciding on the number settled both, and made the case
-testable in a way neither reading had been: a receiver now fails it by reading
-the value into the defined field, and fails it by skipping the tag and parsing
-on.
+conformance suite. Deciding on the number settled the branch at or below the
+ceiling, and made the case testable in a way neither reading had been: a
+receiver now fails it by reading the value into the defined field, and fails it
+by skipping the tag and parsing on.
+
+It did not settle the branch above the ceiling, and the tenth round found the
+two sections still disagreeing there. §4's MAY reaches a message declaring a
+minor version the receiver implements, which is exactly what a driver declaring
+its own version against a peer of that version constructs, so §7's unqualified
+MUST failed a receiver taking the choice §4 gave it. §7 now drives the skip with
+a declared minor version the receiver does not implement, which is the branch §4
+leaves no choice in.
 
 The eighth round's latitude survives where it means something. A field number
 above the highest a receiver assigns may belong to a later version, so a

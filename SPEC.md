@@ -518,11 +518,12 @@ For a tag it does not recognise:
 - **Optional**: where the tag passed the shape checks above, its field number
   decides. Above every number the receiver's version assigns for that message
   type, it MUST skip the field without error, using bit 6 and, when clear, bits
-  5–4 to know how many octets to skip. At or below that number, no version can
-  give the tag meaning. §4.1 freezes a number's assignment, and requires a later
-  version to take a number higher than every number already assigned. The sender
-  is broken, and the receiver MUST abort the exchange and return
-  `REQUEST_MALFORMED`.
+  5–4 to know how many octets to skip. §4 qualifies that skip alone, where the
+  message declares a minor version the receiver implements. At or below that
+  number, no version can give the tag meaning. §4.1 freezes a number's
+  assignment, and requires a later version to take a number higher than every
+  number already assigned. The sender is broken, and the receiver MUST abort the
+  exchange and return `REQUEST_MALFORMED`.
 
 A receiver that skips such a tag skips every occurrence of it, including one
 equal to a tag it has already skipped. Whether a repeat is legal is a property
@@ -1458,8 +1459,10 @@ status (§4). Both conform, so it is not a case here and a driver MUST NOT recor
 either as a failure.
 
 A message declaring a minor version the receiver implements, carrying a tag that
-version does not define, may draw `REQUEST_MALFORMED` or be accepted with the
-tag skipped (§4). Both conform, so it is not a case here either.
+version does not define at a field number above every number the receiver's
+version assigns, may draw `REQUEST_MALFORMED` or be accepted with the tag
+skipped (§4). Both conform, so it is not a case here either. At or below that
+number only rejection conforms, and the rule below drives it.
 
 Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
@@ -1693,7 +1696,10 @@ own, in either direction, and MUST skip an unrecognised **optional** tag without
 error, including one that appears more than once. The skipping obligation
 reaches a field number above every number the receiver's version assigns for
 that message type. At or below that number §4 has it reject, whatever minor
-version the message declares.
+version the message declares. A driver drives the skip with a message declaring
+a minor version the receiver does not implement, since §4 leaves rejection open
+where it declares one the receiver does, and a receiver that rejects there
+conforms.
 
 A receiver MUST accept a message whose declared length is exactly the minimum
 for the version, which a `PING_REQUEST` carrying no fields is, and a field whose
