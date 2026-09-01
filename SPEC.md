@@ -1479,10 +1479,11 @@ document does not specify. A driver MUST be given all of them:
   client's overall deadline to know how long to hold a connection open and how
   long to wait. Neither has a value this document sets.
 - **F7**: the names the client under test reports, mapped onto the client-local
-  names below, and the channel a driver reads them on. Every case driven against
-  a client needs it, including one marked `either`. None of those names crosses
-  the socket and a client using its own is conforming, so a driver can infer
-  neither the names nor the channel from anything the wire carries.
+  names below, and the channel a driver reads them on. Every case that reads an
+  outcome from the client under test needs it, including one marked `either`. A
+  case whose assertions are all on the wire does not. None of those names
+  crosses the socket and a client using its own is conforming, so a driver can
+  infer neither the names nor the channel from anything the wire carries.
 - **F8**: a route by which a driver hands the client under test a value of its
   choosing, through the client's own host interface, and the fields that route
   reaches. For a PAM client that is a conversation supplying a token. A client
@@ -1520,7 +1521,7 @@ then writes further octets without half-closing:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| Further octets written straight after a `VERSION_UNSUPPORTED` response, on a connection the driver has not half-closed | server | the write is accepted and the driver terminates normally | F4 |
+| Further octets written straight after a `VERSION_UNSUPPORTED` response, on a connection the driver has not half-closed | server | the write is accepted and the driver terminates normally | F4, F6 |
 
 §3 has the server draining at that point, so it consumes the write. A server
 that closed instead gives the driver `EPIPE`, or `SIGPIPE` where it has not
@@ -1597,7 +1598,7 @@ from that platform rather than from this document:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | F7 |
+| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | |
 
 No fixture beyond F7 is needed, since every case driven against a client already
 configures it with a socket path. A client that truncated and connected fails,
