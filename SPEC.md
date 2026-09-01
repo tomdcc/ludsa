@@ -1187,7 +1187,7 @@ a protocol failure: the server understood the request and answered it.
 | 2 | `OK` | permitted |
 | 3 | `AUTHN_DENIED_CREDENTIAL` | credential invalid, expired, or wrong audience |
 | 4 | `AUTHN_DENIED_POLICY` | credential valid, but policy denies the identity, or denies it acting as `user` |
-| 5 | `AUTHN_DENIED_USER_UNKNOWN` | no mapping exists for the identity |
+| 5 | `AUTHN_DENIED_USER_UNKNOWN` | the requested `user` does not resolve, or no `user` was sent and the credential resolved no identity |
 | 6 | `AUTHN_DENIED` | the server declined, and does not say why |
 | 7 | `SERVICE_UNSUPPORTED` | the server holds no policy by the name `service` gave, and reached no decision |
 
@@ -1469,11 +1469,11 @@ document does not specify. A driver MUST be given all of them:
 - **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
   applies only where it does, and a peer without a limit is not non-conforming
   for never exhibiting it.
-- **F3**: a credential the peer accepts, and a `user` its policy does not map
-  that credential's identity to. The policy must also refuse that identity a
-  `user` of zero octets, which a deployment whose policy grants any `user`
-  cannot supply. Such a peer cannot run the second decision case and is not
-  non-conforming for that.
+- **F3**: a credential the peer accepts, and a `user` the server holds that
+  its policy does not map that credential's identity to. The policy must also
+  refuse that identity a `user` of zero octets, which a deployment whose policy
+  grants any `user` cannot supply. Such a peer cannot run the second decision
+  case and is not non-conforming for that.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
@@ -1503,14 +1503,23 @@ can reach:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential valid for one identity, sent with a `user` that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+| A credential valid for one identity, sent with a `user` the server holds that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_USER_UNKNOWN` | F1, F3 |
 | A credential the peer accepts, sent with a `user` of zero octets, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
 
-Both halves of the expectation carry weight. An `AUTHENTICATE_REQUEST` requires
-a `service`, so a driver must choose one, and a `service` the server does not
-hold obliges it to answer `SERVICE_UNSUPPORTED` (§6.2.1), which is not `OK` and
-is not a decision either. A peer holding no services would otherwise pass the
-only test of §6.2's binding rule without examining a credential.
+Requiring an `AUTHENTICATE_RESPONSE`, and requiring a denial within it, each
+carry weight. An `AUTHENTICATE_REQUEST` requires a `service`, so a driver must
+choose one, and a `service` the server does not hold obliges it to answer
+`SERVICE_UNSUPPORTED` (§6.2.1), which is not `OK` and is not a decision either.
+A peer holding no services would otherwise pass the only test of §6.2's binding
+rule without examining a credential.
+
+The first case excludes one code. F3 supplies a `user` the server holds and a
+credential it accepts, so the name resolves and an identity resolved, which is
+what §6.2.1 makes `AUTHN_DENIED_USER_UNKNOWN` untrue of. The case cannot require
+`AUTHN_DENIED_POLICY` in its place, since §6.2 leaves a server free to name no
+reason at all. The second case excludes nothing, because whether a `user` of
+zero octets resolves is a deployment's own fact and F3 settles only that the
+policy refuses it.
 
 Further cases exercise the selector, which is neither a rejection nor a
 decision. Each drives the same condition into the enumeration its response type

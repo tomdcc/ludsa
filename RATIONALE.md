@@ -950,9 +950,10 @@ never to send a field empty, which conflated *I have no value for this* with *my
 value is zero octets*. The first is an absent optional field, which is omitted.
 The second is a value, and whether it is acceptable is a question about
 credentials and role names rather than about framing. An empty `user` reaches
-the policy layer and finds no mapping, so it comes back
-`AUTHN_DENIED_USER_UNKNOWN` (§6.2.1), whether the server validated the
-credential first or rejected the name before looking. An empty credential fails
+the policy layer as a name like any other, so it comes back a denial (§6.2.1),
+whether the server validated the credential first or rejected the name before
+looking. Which code names that denial turns on whether the empty name resolves
+for that deployment. An empty credential fails
 validation for any real backend. Both fail closed without the protocol having an
 opinion about the value itself.
 
@@ -2287,10 +2288,10 @@ exact, since a client that connected before reporting has already failed.
 know a name the peer under test recognises and one it does not, and neither is
 derivable from this document. Rate limiting is worse: §6.3 makes it a MAY, so a
 peer with no limiter cannot exhibit `RATE_LIMITED` and is not thereby
-non-conforming. The decision case needs a credential the peer accepts and a
-`user` its policy refuses, which is a property of a deployment rather than of
-this protocol. Naming what the driver must be told turns each from a silent
-assumption into an input.
+non-conforming. The decision case needs a credential the peer accepts and
+a `user` the server holds that its policy refuses, which is a property of a
+deployment rather than of this protocol. Naming what the driver must be told
+turns each from a silent assumption into an input.
 
 F5 is the odd one. §2's identity check binds only a client that was configured
 with an expected identity, so the fixture supplies both halves of that
@@ -2367,6 +2368,17 @@ of §6.2's binding rule without ever examining a credential.
 Naming the `AUTHN_DENIED` codes rather than "not `OK`" is what closes it, and
 naming them by their prefix rather than by their numbers is what keeps it closed
 if a later version adds one.
+
+**Why only the first decision case excludes a code.** §6.2.1's line is whether
+the requested name resolves, and the tenth round found the code table's own
+gloss contradicting it. Once the gloss was corrected, the first case became able
+to separate the two denials, but only because F3 supplies a `user` the server
+holds. Without that the name might not resolve, and
+`AUTHN_DENIED_USER_UNKNOWN` would be the true answer. The case still cannot
+require `AUTHN_DENIED_POLICY`, since naming a reason at all is a server's
+choice. The second case cannot separate them, because whether a name of zero
+octets resolves is a deployment's own fact and F3 settles only that the policy
+refuses it.
 
 **Why the empty `user` case needs the fixture to say so.** An absent `user` asks
 the server not to decide. It does not bind the exchange to an empty or null
