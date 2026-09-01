@@ -1653,17 +1653,23 @@ connecting is what binds. A client that omitted the field and sent the rest has
 failed it too, since the driver's socket then saw a connection.
 
 One further case observes a client configured with a path it cannot use, which
-§2's prohibition reaches and no message can. The driver configures the client
-with a path longer than its platform's socket address allows, which it reads
-from that platform rather than from this document:
+§2's prohibition reaches and no message can. The driver binds a socket at each
+length a truncating client could land on, which its platform gives as the size
+of the address structure's path array and one less, and configures the client
+with a longer path sharing that prefix. It reads those lengths from the platform
+rather than from this document:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | |
+| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and no socket the driver bound saw a connection | |
 
 No fixture beyond F7 is needed, since every case driven against a client already
-configures it with a socket path. A client that truncated and connected fails,
-and so does one that connected to whatever the truncated path named.
+configures it with a socket path. The driver's own paths are not free, though. A
+client that truncates lands on one of the sockets it bound, so the assertion
+that no connection arrived is what fails such a client. A driver that bound
+anywhere else could not tell one from a conforming client, since a truncated
+path that names nothing draws the same `CONNECTION_FAILED` as a path never
+used.
 
 One further case observes a client configured with a path §2 forbids for a
 different reason. The driver binds its socket in a directory of its choosing,

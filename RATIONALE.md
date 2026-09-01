@@ -2363,10 +2363,25 @@ assertions are satisfied by the behaviour the case exists to catch.
 The driver therefore binds its socket in a directory, puts the client's host in
 that directory, and configures the client with the basename. A client that
 resolves now lands on the driver's socket, so the assertion that no connection
-arrived is the one that fails it. The general shape is that a case against a
-client's path handling has to put the driver's socket where a non-conforming
-client would go, since a wrong path that names nothing is indistinguishable from
-a path never used.
+arrived is the one that fails it.
+
+**The same shape, and the same defect, in the case next to it.** A case against
+a client's path handling has to put the driver's socket where a non-conforming
+client would go, because a wrong path that names nothing is indistinguishable
+from a path never used. The tenth round found the too-long case failing that
+test as written: it had the driver configure an over-long path and assert no
+connection, which a truncating client satisfies by landing on a name that holds
+nothing. It also claimed to catch both a client that truncated and connected and
+one that connected to whatever the truncated path named, and caught neither.
+
+A truncating client has more than one place to land, which is why the driver
+binds more than one socket. The path travels in a fixed array and the two
+spellings that get it wrong differ by the terminator: one fills the array and
+one stops an octet short. A driver binding at only one of them misses the other
+silently, in the same way the original case missed everything. So the driver
+binds at the array's size and at one less, and configures the client with a
+longer path sharing that prefix. Stated as a property because the size varies
+four ways across platforms, on the same ground as §2's own rule.
 
 The report ends the case rather than a deadline. A driver waiting to prove a
 negative would have to decide how long a connection that is never coming takes
