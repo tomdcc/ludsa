@@ -1126,10 +1126,12 @@ a configured allowlist, subject to these constraints:
   co-located.
 
 Where a shared PID namespace makes the `SO_PEERCRED` pid meaningful, a server
-may compare it against the `pid` field of an AUTHENTICATE request. It should not
-reject on a mismatch by default, since forging that field requires access that
-already permits forging the whole request. An opt-in strict mode is reasonable,
-documented as a correctness check rather than a defence.
+may compare it against the `pid` field of an AUTHENTICATE request, and log the
+disagreement. It MUST NOT refuse on one. §6.2 makes `pid` logging-only, and a
+mismatch is not evidence of an attack: forging the field requires access that
+already permits forging the whole request. A strict mode would buy nothing, and
+it would cost a deployment valid logins the day its namespace assumption stopped
+holding.
 
 A server that logs both should log the claimed pid and the attested pid as
 separate fields, rather than substituting one for the other. Otherwise the

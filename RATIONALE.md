@@ -1900,6 +1900,16 @@ from one exchange.
 carrying `%p`. Forging it requires access that already permits forging the whole
 request, so it is not a security boundary.
 
+The rule says "any decision" rather than "any authentication decision", and the
+ninth round found the guidance relying on the gap it does not leave: it offered
+an opt-in mode that refused a connection whose attested pid disagreed with the
+claimed one, called a correctness check rather than a defence. The name does not
+change which rule it breaks, and the trade is bad in both directions. Against an
+attacker it buys nothing, since one who can forge the field can forge the
+request. Against a deployment it risks refusing valid logins on a self-reported
+value the moment a namespace assumption stops holding. Logging the disagreement
+keeps the diagnostic and drops the hazard.
+
 **Why there is no machine-readable companion code.** The result codes are the
 machine-readable layer. A finer classification, separating *expired* from *bad
 signature* from *audience mismatch*, is backend vocabulary, and §6.3 already
