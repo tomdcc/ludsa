@@ -914,10 +914,10 @@ of it rather than the only statement of it.
 **What a receiver may do about a breach.** The question arrived the day the rule
 went in: should a receiver that knows the sending version reject a tag that
 version does not define? The first answer was no, on three grounds, and it was
-too tight. The rule now turns on the tag's field number: at or below the highest
-number the receiver's version assigns for that message type it MUST reject, and
-above that it skips, with a MAY to reject instead where it implements the
-declared version.
+too tight. The rule now turns on the tag's field number against that message
+type's ceiling (§3.3): at or below it the receiver MUST reject, and above it the
+receiver skips, with a MAY to reject instead where it implements the declared
+version.
 
 The three grounds, and what happened to them. *A receiver could apply the check
 only against a version it already implements, so it polices some peers and not
@@ -1230,8 +1230,8 @@ does with a tag it does not recognise.** The declared version is peer-supplied,
 so a rule turning on it makes the receiver's answer depend on the sender
 reporting its own version correctly. The field number does not. §4.1 freezes a
 number's assignment, and requires a later version to take a number higher than
-every number already assigned. So a number at or below the highest one a
-receiver's version assigns can never acquire a new meaning. A tag carrying such
+every number already assigned. So a number at or below a receiver's ceiling for
+that message type can never acquire a new meaning. A tag carrying such
 a number, whose whole value is not that number's assignment, is one no version
 defines, and a receiver can prove it without trusting anything the sender said.
 
@@ -1256,13 +1256,27 @@ a declared minor version the receiver does not implement, which is the branch §
 leaves no choice in.
 
 The eighth round's latitude survives where it means something. A field number
-above the highest a receiver assigns may belong to a later version, so a
-receiver skips an optional tag carrying it. A required tag never qualifies,
-since a later version's addition is optional. Where the message also declares a
-minor version the receiver
-implements, the sender has broken §3.2 by carrying the tag at all, and a
-deployment that wants strict input in an authentication path may reject on that
-ground.
+above the ceiling may belong to a later version, so a receiver skips an optional
+tag carrying it. A required tag never qualifies, since a later version's
+addition is optional. Where the message also declares a minor version the
+receiver implements, the sender has broken §3.2 by carrying the tag at all, and
+a deployment that wants strict input in an authentication path may reject on
+that ground.
+
+**Why the pivot is a named quantity.** It was stated six times in the normative
+text, in two phrasings that are not interchangeable: "above every number the
+receiver's version assigns", and "at or below the highest number it assigns".
+The first is vacuously true where a message type assigns no field and the second
+has no value there, so the two answer a version 1.1 tag in a `PING_REQUEST`
+oppositely, one skipping and one rejecting. Two of the six also switched
+quantifier inside a single sentence, naming a set and then referring back to it
+as "that number". Naming the quantity once and referring to it settles the empty
+case in the definition rather than six times over, and the tenth round reached
+it after three consecutive rulings on copies of this same rule drifting apart.
+The definition says a type its version assigns no field in has a ceiling below
+every field number, rather than giving that ceiling a value, because field
+number 0 is reserved and a property carries the meaning a number would only
+imply.
 
 **Why no negotiation.** The two ends are not deployed together. Each declares
 its own version, and §3.3 makes a minor difference safe without either side

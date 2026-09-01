@@ -628,13 +628,24 @@ or hostile peer sends, and §7 drives it against both sides.
 **The answer is a rejection, and §4 leaves no choice about it.** Because no
 version can give `0x0242` a meaning in an `AUTHENTICATE_REQUEST`, skipping it
 would be fail-open against a peer the receiver can prove broken. Compare the
-incoming field number against the highest your schema assigns for that message
-type: above it, skip an optional field; at or below it, reject the message. An
-unrecognised required tag is malformed at any number, since a later version's
-addition is optional (§4.1). A whole-tag
-decoder that skips fails §7's case as surely as a number-keyed one that reads,
-so a decoder that gets the whole-tag comparison right and the number comparison
-wrong still fails.
+incoming field number against that message type's ceiling (§3.3), the highest
+number your own schema assigns there: above it, skip an optional field; at or
+below it, reject the message. An unrecognised required tag is malformed at any
+number, since a later version's addition is optional (§4.1). A whole-tag decoder
+that skips fails §7's case as surely as a number-keyed one that reads, so a
+decoder that gets the whole-tag comparison right and the number comparison wrong
+still fails.
+
+**A message type your schema gives no field has a ceiling below every field
+number**, so every unrecognised optional tag in one is skipped. `PING_REQUEST`
+is that type in version 1.0, and it is where the natural implementation goes
+wrong: a per-type maximum computed by folding over the schema's field numbers
+has no value to return for an empty schema, and code that treats the absent
+maximum as "no tag can be above it" rejects a tag §3.3 requires it to skip. That
+fails a version 1.1 peer that added an optional field to `PING_REQUEST`, and
+nothing in `testdata/` exhibits it, because no version 1.0 peer sends such a
+message. Seed the fold with a value below every field number rather than
+special-casing the empty schema at the comparison.
 
 **Absent and empty are different, and a struct field cannot hold both.** §3.2
 makes a value of zero octets a value rather than an absent field, so `""` from a
