@@ -101,14 +101,20 @@ permissions, and §8 makes permissions the whole model.
 reason about. Pipelining would introduce that class of bug for no gain, given
 the transport is local and the exchange is a single round trip.
 
-**Why the half-close requirement is asymmetric.** A client holds the connection
-open to read the reply. Without an explicit half-close the server has no
-end-of-request signal beyond the length prefix, and a client that dies mid-write
-leaves it blocked until its read deadline. The half-close turns that into an
-immediate error. The server's side is stated separately, that it closes after
-replying, which produces EOF at the client. Without that a client cannot run
-§2's own excess-octet check, because reading once more for EOF would block until
-its overall deadline.
+**Why both sides half-close, and why their reasons differ.** A client holds the
+connection open to read the reply. Without an explicit half-close the server has
+no end-of-request signal beyond the length prefix, and a client that dies
+mid-write leaves it blocked until its read deadline. The half-close turns that
+into an immediate error.
+
+The server's side is stated separately, and the tenth round made it
+unconditional: it shuts down its write direction as soon as it has written the
+response, before any drain it owes rather than after. Deferring it until the
+drain finished left a client that had read every declared octet still waiting
+for the end, against a server holding the connection open exactly as §3 tells it
+to, while the same paragraph of §2 promised that a client could read to end of
+file without risk of blocking. Half-closing costs a draining server nothing,
+since a drain only reads and §2 allows no second response.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces
@@ -429,13 +435,15 @@ it, and `UNAVAILABLE` lost its client clause when the response codes were split
 out. What was left was which client code covers it, and the three that existed
 then were all defined by end of file, which a deadline expiry is not.
 
-A fourth code keeps a distinction worth keeping, but not the one it first
-appears to. The codes split on what arrived before they split on what ended it.
-Nothing arriving is the ordinary shape of a server that writes only once it has
-an answer, and there the terminator is the whole story: the server closed, or it
-is still thinking. A response that started and stopped part-way is a different
-fault, and the same fault whether the server then died or merely hung, so it
-reports `RESPONSE_INCOMPLETE` either way.
+A fourth code keeps a distinction worth keeping, and the tenth round changed
+which one. The codes split on what arrived before they split on what ended it,
+and that ordering is now reversed. §2 makes a transfer its octets and its end,
+so a client holding every declared octet and no end has not received a response
+and has no outcome to report. What ended the wait is therefore the whole
+question, and how much arrived separates only the two the server ended: nothing
+at all, and part of a response. A server that hung after writing part of one is
+a timeout rather than an incomplete response, because the client is still
+waiting rather than holding a fault the server committed.
 
 All of them map to `PAM_AUTHINFO_UNAVAIL`, so the splits earn their keep in a
 log rather than at the stack, which is the trade `RESPONSE_ABSENT` and

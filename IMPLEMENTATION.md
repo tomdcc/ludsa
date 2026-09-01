@@ -375,13 +375,19 @@ a correct server needs both that and the descriptor-level one.
 Because §2 makes the check best-effort, a server that never detects anything
 still conforms, which is exactly why a broken check stays undiscovered.
 
-**A client needs none of this.** §2 has the server close after it responds, so a
-client checks for excess octets by reading once more and requiring end of file.
-The deadlock the machinery above works around is the server's problem, and it
-exists because a client that omits its half-close leaves the server nothing to
-wait for. Reading to EOF on the client side is safe only because the server's
-close is required; without that rule it would hang until the client's overall
-deadline.
+**A client needs none of this.** §2 has the server shut down its write direction
+as soon as it has written the response, whether or not it still owes a drain, so
+the end reaches the client while the drain runs rather than after it. A client
+reads once more and requires end of file.
+
+That read is not only the excess-octet check. §2 makes the end part of the
+transfer, so a client holding every declared octet and no end has no response
+yet: it has not finished reading, and if its deadline expires there it reports
+`RESPONSE_TIMEOUT` and not the result it parsed. Do not shortcut the read
+because the declared octets are all in hand, and do not treat a parsed `OK` as
+an outcome before the end arrives. The deadlock the machinery above works around
+is the server's problem, and it exists because a client that omits its
+half-close leaves the server nothing to wait for.
 
 ## Creating and publishing the socket
 
