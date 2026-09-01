@@ -272,6 +272,15 @@ that is `REQUEST_MALFORMED`.
 detects the same condition in a response reports the name §7 gives it, never a
 `REQUEST_` code (§5).
 
+**Closing on a peer that is still writing.** A close cuts off whatever the
+counterpart had not finished writing. Reading and discarding first is what
+avoids that, and how far the obligation goes follows what the closing side owes
+the writer. A server that rejected a message was willing to serve that peer, and
+asked for the request it would be cutting off, so it drains. A server that
+refused the peer on its credentials was not, so §5 leaves it a choice, and one
+shedding load may decline. A client owes nothing either, since nothing is
+waiting on its read (above).
+
 A server that rejects a message before it has read all of it MUST NOT allocate
 storage for the body. It MUST send its response, then read and discard until the
 earliest of these, and MUST then close:
@@ -291,8 +300,9 @@ server sends one response to a connection.
 
 Where it expired before the response went out, the earliest terminator is
 already met and the drain ends at once. So a server answering `REQUEST_TIMEOUT`
-writes and closes, discarding nothing, and that is the only rejection with no
-drain behind it: every other one is settled while the deadline still runs. The
+writes and closes, discarding nothing, and that is the only message rejection
+with no drain behind it: every other one is settled while the deadline still
+runs. The
 client is not left without its answer, since a response already written survives
 the close (§2), and it may take `EPIPE` on a write it had not finished.
 
