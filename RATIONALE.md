@@ -347,10 +347,12 @@ meeting a major version it does not implement replies `VERSION_UNSUPPORTED` in
 its own. Answering when it has not been given a version is the same move, and
 refusing to make it cost the two cases below their diagnosis.
 
-The bounded wait comes first because a version the client chose is better than
-one the server picked. A client that has connected and is about to write is
-answered in its own version if the server waits a moment, and a client that
-never writes was never going to supply one.
+Waiting for the version word is still the better answer where a server can
+afford it, because a version the client chose beats one the server picked. What
+the ninth round removed was the short bound §2 used to put on that wait. It was
+a second deadline and not one of §3's drain terminators, so its expiry left a
+drain owed on a connection the server had just stopped reading, and §2's request
+deadline bounds the same set of clients without that consequence.
 
 **Why the request deadline needed qualifying.** The unqualified sentence told a
 server to answer `REQUEST_TIMEOUT` whenever the deadline expired, including
@@ -358,13 +360,15 @@ before two octets had arrived, which the paragraph above it forbade. §7 case 19
 already carried the qualification. §2 and §7 disagreeing about the same
 condition is the shape of defect this document keeps producing at section seams.
 
-**Why `RATE_LIMITED` reads two octets first.** The concurrency limit is reached
-at accept, before anything has arrived, so answering it was the one status the
-protocol asked a server to send with nothing in hand. Reading the version word
-costs two octets against the cost of having accepted the connection, and it
-keeps one rule about when a server may speak rather than a rule with an
-exception. Where the client sends nothing, the server falls back to its own
-version like any other answer without one.
+**Why `RATE_LIMITED` reads the version word where it can.** The concurrency
+limit is reached at accept, before anything has arrived, so answering it was the
+one status the protocol asked a server to send with nothing in hand. Reading the
+version word costs two octets against the cost of having accepted the
+connection, and it keeps one rule about when a server may speak rather than a
+rule with an exception. A server at its limit may also answer in its own major
+version without waiting, which is the same permission every answer without a
+version has, and it is the one to take when the limit is what it is defending
+against.
 
 **Why a client has a name for a request it cannot send.** §3.1 forbids a sender
 emitting a field above its maximum and forbids anyone truncating one to fit, and
@@ -411,9 +415,12 @@ governs, and it is the half a driver could observe. It is a MUST NOT.
 
 Reporting to the host application is a rule about a client's dealings with its
 own caller, over a value the protocol never delivered, since the host handed it
-in. Objection 5 declines to legislate that, five times over, and promoting this
-sentence to a MUST would have taken the boundary down by a side door. It stays
-in the indicative, which is what it always was and now visibly on purpose.
+in. Promoting this sentence to a MUST would bind a client on something no peer
+can observe and that no conforming exchange produces, which is the line
+objection 5 was eventually accepted on: the protocol requires a client to
+survive what it authorises a peer to do, and a host handing its own client an
+oversized value is not that. It stays in the indicative, which is what it always
+was and now visibly on purpose.
 
 **Why a client's own deadline is `RESPONSE_TIMEOUT`.** It had two candidate
 statuses and §5 supported both readings. The rename settled half of it:
@@ -1346,12 +1353,19 @@ four ways of saying the same thing. Widening a field or making an optional field
 required produces a different tag, which is the retirement of one field and the
 addition of another rather than a change to be forbidden.
 
-**Why field number 0 is reserved.** §3.2's ordering and at-most-once rules
-together mean tags are strictly ascending, and the check that verifies them
-compares each tag against the one before, with zero as the value before the
-first. A tag of
-`0x0000` is otherwise perfectly legal, being an optional fixed-width one-octet
-`integer` numbered 0, and it fails that comparison in first position.
+**Why field number 0 is reserved.** The ordering check compares each tag against
+the one before it, with zero as the value before the first. §3.3's shape checks
+reject a tag whose field number is zero before any of that runs, and reserving
+the number is what makes zero safe as that initial value. A tag of `0x0000` is
+otherwise perfectly legal, being an optional fixed-width one-octet `integer`
+numbered 0.
+
+The ordering check alone would not stop it. §4 compares for no tag lower than
+the tag before it rather than for a strictly higher one, because §4.1 lets a
+later minor version assign a repeatable field whose occurrences carry equal
+tags. `0x0000` in first position is not lower than zero, so it passes. The shape
+check is what rejects it, and the reservation is what lets the sentinel be zero
+at all.
 
 The failure would not appear for years. No version 1.0 tag is `0x0000`, so every
 vector passes; the break arrives with the first minor version to use the number,
@@ -2049,9 +2063,10 @@ be derivable from the first.
 The code carries the distinction instead. A client that must answer at two
 points reads which decision the code belongs to.
 
-**Why a denial says as little as the server chooses.** The four denials are one
-required code and three optional refinements. `AUTHN_DENIED` names no reason and
-is always available; the others are for a server willing to disclose that much.
+**Why a denial says as little as the server chooses.** The denials are one
+required code and a set of optional refinements. `AUTHN_DENIED` names no reason
+and is always available; the others are for a server willing to disclose that
+much.
 
 The reason is enumeration. `AUTHN_DENIED_USER_UNKNOWN` tells a client which user
 names exist, and that does not stop at the client: a host application behaves
@@ -2296,10 +2311,16 @@ The price is that a driver cannot read the outcome of a client-direction case
 from anything the wire carries. §7 asserted those outcomes for several rounds
 with nothing supplying either the client's own names or the channel they arrive
 on, which made the client half of the suite rest on a premise the document never
-stated. F7 is that premise written down. It is a precondition of a direction
-rather than of a case, which is why the *needs* column does not carry it: doing
-so would mean marking every row that can be driven against a client, and a later
-case added in one direction would silently be marked wrong.
+stated. F7 is that premise written down. It is a precondition of a kind of case
+rather than of any one case, which is why the *needs* column does not carry it:
+doing so would mean marking every row that reads an outcome from a client, and a
+later case added of that kind would silently be marked wrong.
+
+The ninth round narrowed the kind. F7 used to claim every case driven against a
+client, which two do not need: one asserts that the driver reads end of file and
+that its response is accepted for writing, and one asserts that a field on the
+wire carries its octets unchanged. Both are assertions about the socket, so
+neither reads the client's own names or the channel they arrive on.
 
 **Why the client's line sits at one octet and the server's at two.** The two
 thresholds answer different questions. A server needs `ludsa_version_major`
