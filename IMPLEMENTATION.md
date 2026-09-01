@@ -1177,6 +1177,13 @@ threshold past which a refused connection is closed at once, with no wait and no
 discard. §5 permits that without qualification, and a server with no such
 threshold has no way to shed the cost.
 
+The concurrency refusal is the same shape and §3 now says so: a refusal reached
+at accept owes no drain on either ground. Do not run a discard loop on the
+`RATE_LIMITED` path by analogy with the rejection path, which does owe one. The
+bound there is `2 x MAX_LENGTH`, so reading a refused connection to its end
+costs 65534 octets at the moment you have least to spend them on, and a server
+that sheds load by draining has built the amplifier it was shedding to avoid.
+
 **A peer rule that turns on `service` is a second gate, not a later check.** The
 credentials check still runs at accept. What waits is which services this peer
 may reach, and `PEERCRED_DENIED` answers that too. Such a server meeting a

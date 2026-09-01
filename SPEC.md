@@ -154,8 +154,8 @@ The server SHOULD bound concurrent connections. At its limit it MAY respond
 kernel backlog. The limit is reached at accept, before any octet has arrived, so
 a server that chooses to answer reads `ludsa_version_major` first, or answers in
 its own major version without waiting for one. Where it waits and the request
-deadline expires, that deadline is among §3's drain terminators, so it closes
-and owes no drain.
+deadline expires, it closes. §3 has a refusal reached at accept owe no drain,
+whatever the server read while waiting.
 
 **Connect-time retry.** A client MAY retry a connection that failed for a reason
 a later attempt could change: `ECONNREFUSED` and `ENOENT`, because the server
@@ -330,9 +330,13 @@ counterpart had not finished writing. Reading and discarding first is what
 avoids that, and how far the obligation goes follows what the closing side owes
 the writer. A server that rejected a message was willing to serve that peer, and
 asked for the request it would be cutting off, so it drains. A server that
-refused the peer on its credentials was not, so §5 leaves it a choice, and one
-shedding load may decline. A client owes nothing either, since nothing is
-waiting on its read (above).
+refused the connection asked for nothing, and no refusal reached at accept owes
+a drain: §5's peer check is settled there, and §2's concurrency bound is reached
+there. Such a server MAY still read and discard so that a
+client mid-write is not cut off, on the bounds below, and one shedding load may
+decline, since the load is what its refusal is about. Reading the version word
+to choose an encoding does not change that, on either ground. A client owes
+nothing either, since nothing is waiting on its read (above).
 
 A server that rejects a message before it has read all of it MUST NOT allocate
 storage for the body. It MUST send its response, then read and discard until the
@@ -912,11 +916,9 @@ both answered `PEERCRED_DENIED` in the server's own major version. Neither
 `VERSION_UNSUPPORTED` nor `REQUEST_TIMEOUT` displaces it, because the refusal
 was settled before either could arise and nothing the peer sends can change it.
 
-Such a server owes no drain, since §3's binds a server that rejected a message
-and this refusal precedes any. It MAY read and discard so that a client still
-writing is not cut off mid-write, and parses nothing beyond
-`ludsa_version_major`. It holds no length it may rely on, so §3's permission to
-stop early does not apply and its bounds do.
+Such a server owes no drain and MAY read and discard, on §3's terms. It parses
+nothing beyond `ludsa_version_major`, and holds no length it may rely on, so
+§3's permission to stop early does not apply and its bounds do.
 
 A server whose rules also govern which peers may reach which `service` values
 has a second gate. It cannot close that one before it has read a `service`. Its

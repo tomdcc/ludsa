@@ -625,6 +625,30 @@ request fits it in the buffer and never blocks, whatever the server does. A
 client that writes the envelope and the body separately has a gap between the
 two, and no buffer size closes it.
 
+**Why a refusal reached at accept owes nothing.** §3's obligation follows what
+the closing side owes the writer. A server that rejected a message had asked for
+that request, so cutting the peer off mid-write is its own doing. A server that
+refused the connection asked for nothing, and the ground does not reach it.
+
+The tenth round found the document saying that in one place and implying the
+opposite in another. §5 had a concurrency decline reached at accept, "so nothing
+has asked for anything yet", while §2 reached "owes no drain" by way of the
+deadline being a drain terminator, which is a reason that presupposes a drain.
+§3's own lead-in held the answer attached to the wrong sentence: the clause
+about a server shedding load hung off the credentials case, so a reader looking
+for the load-shedding rule could find it only by misreading the one beside it.
+Both reviewers who raised this read it that way.
+
+What the wrong reading cost is not ambiguity alone. Draining a refused
+connection means reading to `2 x MAX_LENGTH` on the path where the server has
+least to spend, and a peer opening connections in bulk is what produces the load
+in the first place, so the reading that owed a drain turned the refusal into the
+amplifier it exists to prevent.
+
+The rule now sits once, in §3's lead-in, with §2 and §5 pointing at it. Reading
+the version word to choose an encoding does not attach the obligation on either
+ground, since the refusal was settled before the read.
+
 **Why it is required rather than encouraged.** The protocol creates the
 condition. §2 has a server close after it responds, and §3 has it respond before
 it has read the request, so the specification itself arranges for a client to be
