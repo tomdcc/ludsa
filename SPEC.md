@@ -1537,6 +1537,13 @@ document does not specify. A driver MUST be given all of them:
   where a client that resolved its configured path would land, which the driver
   arranges by choosing that directory. A client whose host cannot have one set
   cannot run that case and is not non-conforming for that.
+- **F10**: whether the client under test can be configured to write its request
+  in bounded pieces, and to pause between them. This is a test affordance and
+  not anything the protocol asks of a client at runtime, where one write is the
+  better behaviour. It is what lets a driver close a connection while a write is
+  genuinely outstanding, since no request this document permits is large enough
+  to arrange that on its own. A client that cannot be configured that way cannot
+  run the case below in its reliable form and is not non-conforming for that.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1706,12 +1713,24 @@ accepts, reads part of the request, and closes:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| The connection closed while the client under test is still writing its request | client | the client reports `RESPONSE_ABSENT` | F8 |
+| The connection closed while the client under test is still writing its request | client | the client reports `RESPONSE_ABSENT` | F8, F10 |
 
-The driver needs a request large enough that the client is still writing when it
-closes, which F8's route supplies by handing it a `credential` near its §3.1
-maximum. What the case detects is a client whose host application did not
-survive the write failing, since that client reports nothing at all.
+What the case detects is a client whose host application did not survive the
+write failing, since that client reports nothing at all.
+
+Request size cannot arrange the condition. Appendix A's largest request fits
+inside a default socket send buffer on common platforms, so a client that issues
+it in one call has returned from the write before the driver can read anything,
+and `MAX_LENGTH` forbids a larger one. F10 is what makes the case reliable: a
+client that writes in bounded pieces, pausing between them, is still writing
+when the driver closes. F8's near-maximum `credential` widens that window rather
+than creating it.
+
+A client that offers no such configuration is driven by a driver that accepts
+and closes at once, reading nothing. The case is then best-effort, because
+whether the write fails is not the driver's to arrange: a client that completed
+its write in one call is not exercised by the case and cannot be told from one
+that survived.
 
 One further case observes a client that holds a complete response and no end of
 file. The driver accepts a connection, reads the request, writes a well-formed

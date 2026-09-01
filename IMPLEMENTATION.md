@@ -331,6 +331,15 @@ None of that reaches the Go client, which gets an error where the C one gets a
 signal. What does reach it is the paragraph below: the write failing is not the
 end of the exchange, and the response may already be waiting.
 
+**Offer a way to write the request in pieces, for the test suite only.** §7's
+F10 asks whether a client can be configured to bound the octets it writes before
+flushing, and to pause between writes. Nothing at runtime wants that, and one
+write is the right default. It exists because no request this protocol permits
+is large enough to leave a client mid-write against a default socket send
+buffer, so without the switch a driver cannot make the write fail and §2.1's
+rule goes untested against you. A build-time or configuration-only knob is
+enough, and a client that offers none is still conforming.
+
 **A short write and an `EINTR` are resumable.** Both are routine inside a host
 that installs handlers without `SA_RESTART`, which is the host's prerogative and
 not something a guest library may change. Resuming on the same connection is not

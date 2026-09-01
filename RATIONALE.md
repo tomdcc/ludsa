@@ -2377,6 +2377,29 @@ It is affordable because the client-side harness already does it. The PAM
 measurement that settled how a token reaches the module is a conversation with a
 chosen token, so an oversized one is the same mechanism with a different value.
 
+**Why the mid-write case asks a client to write badly on purpose.** §2.1's rule
+is the one whose violation kills an `sshd`, and the tenth round found its only
+case unable to exercise it. The case had the driver read part of the request and
+close while the client was still writing, and no request this protocol permits
+is large enough for that: Appendix A's largest sits an order of magnitude inside
+a default socket send buffer, so the client returns from its write before the
+driver has read anything, then reports `RESPONSE_ABSENT` exactly as it would for
+an ordinary silent server. Both reviewers reached that independently, and both
+proposed conceding it.
+
+F10 is the author's answer instead, and it inverts where the difficulty sits. A
+driver cannot make a conforming client write in pieces, but the client can offer
+to. Bounding the octets written before a flush, and pausing between them, is a
+test affordance a client that wants to be tested here can supply, and it makes
+the window the driver needs. Nothing about it belongs in the protocol: one write
+is the better behaviour at runtime, and a client without the switch is not
+non-conforming, which is the concession F2, F3, F5 and F8 already carry.
+
+F8 stays on the case with its reason corrected. It never made the client "still
+writing", which is what the old text claimed. A larger request makes it likelier
+that a client issues more than one write, which is the only way the fallback
+construction catches anything at all.
+
 **Why the relative-path case needs a fixture of its own.** F9 is the working
 directory the driver gives the client's host, and the case does not work without
 it. A relative path resolves somewhere, and if the driver does not choose where,
