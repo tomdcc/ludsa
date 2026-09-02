@@ -2100,11 +2100,13 @@ These are defaults, not requirements. A client MAY let a deployment override the
 code it returns for an outcome, and one that does SHOULD keep these as its
 defaults, so two clients behave alike where nobody has configured otherwise. A
 client MUST NOT let an override admit a caller on a `result` other than `OK`, or
-turn any failure into an admission. The test is what the stack does, not what
-one entry point returns: the `PAM_SUCCESS` this appendix gives
-`AUTHN_DENIED_POLICY` at `pam_sm_authenticate` admits nobody by itself, because
-the same outcome denies at `pam_sm_acct_mgmt` and the rule below binds a client
-that relies on it.
+turn any failure into an admission. It MUST NOT let one return `PAM_SUCCESS`
+from an entry point where the table above does not, so the deferral this
+appendix makes for `AUTHN_DENIED_POLICY` stays the appendix's own. That cell
+admits nobody by itself, because the same outcome denies at `pam_sm_acct_mgmt`
+and the rule below binds a client that relies on it, and it is the one place
+where the test of what a stack does rather than what an entry point returns has
+to be applied.
 
 `CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
 ends, a client and a server that a configuration does not permit to talk. A

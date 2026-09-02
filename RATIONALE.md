@@ -3094,6 +3094,18 @@ rather than patching a module. The one thing an override may not do is turn a
 failure into a success, which is the only direction in which a configuration
 mistake here is unrecoverable.
 
+**Why the override bound names the entry point.** The prohibition was stated as
+a test of what a whole stack does, which is what the emphasised cell needs:
+`PAM_SUCCESS` at `pam_sm_authenticate` for an authorisation outcome admits
+nobody, because the `account` phase denies. Read as the bound on overrides, the
+same sentence let a deployment defer any denial that way, since the stack still
+denies wherever an `account` line exists. That multiplies the appendix's one
+fail-open by every code, on the omission the appendix already says a module
+cannot detect. The bound now names the entry point: no override returns
+`PAM_SUCCESS` where the table does not, and the deferral stays a cell the
+appendix chose rather than a pattern it licensed. What a deployment loses is a
+rearrangement nobody has asked for.
+
 The peer-identity outcomes are asked to move together for the same reason they
 share a default. Two of the three already do, since a socket the client cannot
 open and a peer it did not expect both report `CONNECTION_FAILED`; only
