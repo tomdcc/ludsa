@@ -803,14 +803,14 @@ fault lies beyond the octets a receiver acted on: a receiver that read a
 fault after it, and one that read the message whole answers the framing fault as
 the order requires. Both conform.
 
-**Neither of those is forced, deliberately.** Forcing the fault would oblige a
+**None of that is forced, deliberately.** Forcing the fault would oblige a
 receiver that reads a message whole to parse a prefix it has already given up
 on. Forcing the truncation would oblige a receiver that validates as it reads to
 wait for the rest of a message it has already judged. Each rule conscripts one
-of the two ways of reading a socket, and nothing this protocol governs turns on
-the answer: a peer that sends a message both short and faulty is broken twice
-over, and one that stopped because it died is not reading the response whichever
-status it gets.
+way of reading a socket, and nothing this protocol governs turns on the answer:
+a peer that sends a message both short and faulty is broken twice over, and one
+that stopped because it died is not reading the response whichever status it
+gets.
 
 Steps 10 to 13 are not detectable early. A required field is missing only once
 the message ends, and the selectors, limits and decision need the whole message,
@@ -1561,7 +1561,7 @@ A message both truncated and faulty in the octets that arrived may draw either
 status (§4). So may one whose framing fault lies behind a `msg_type` the
 receiver does not implement, since a receiver that answered on the type it read
 never reached the fault. Both conform in each, so neither is a case here and a
-driver MUST NOT record either as a failure.
+driver MUST NOT record any of those outcomes as a failure.
 
 A message declaring a minor version the receiver implements, carrying a tag that
 version does not define at a field number above that message type's ceiling
