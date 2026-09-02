@@ -600,6 +600,25 @@ comparison then fails intermittently rather than consistently, which reads as
 flakiness rather than a conformance bug, and a two-field response passes half
 the time. Sort the tags, or build a fixed-order slice.
 
+**One field name can carry two tags.** §6.4 gives `server_desc` `0x0143` in a
+`PING_RESPONSE` and `0x0243` in a `STATUS_RESPONSE`, because `PING_RESPONSE` has
+no required field to number ahead of it. A tag belongs to the pair of message
+type and field, never to the field alone, so an encoder's constants are
+per-schema exactly as a decoder's are. A single `TagServerDesc = 0x0243` shared
+by both response builders emits a non-conforming `PING_RESPONSE`, and a
+hand-authored vector catches it only if someone wrote a `PING_RESPONSE` vector.
+This is the mirror of the decoder hazard below, where one field number carries
+two tags.
+
+**Do not echo `ludsa_version_minor`.** §3 makes a response's minor version the
+server's own for that major version, never the request's. The natural Go shape
+produces the breach without anyone choosing it: decode the envelope into a
+struct, hand it to the handler, and reuse it to build the response. A `wire`
+suite cannot see the fault, because vectors compare a codec against fixed bytes
+and the echo happens in the handler above it. §7 drives it, so a conformance run
+catches what your own tests will not. Build the response envelope from your own
+version rather than from the one you parsed.
+
 **The same warning applies on decode, for the opposite reason.** A map catches
 a repeated tag for free, which is what makes it tempting, and it discards the
 ordering §7 case 6 requires. The check has to happen while scanning, comparing
