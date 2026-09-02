@@ -748,8 +748,8 @@ predates it from one that had no value for it.
 The protocol has no negotiation. Each side declares its own version, and §3.3
 makes a minor difference safe without either side agreeing to anything.
 
-**Validation proceeds outermost first**, and a message failing more than one
-check takes the outcome of the earliest:
+**Validation proceeds outermost first**, and a receiver holding the outcomes of
+more than one of these checks reports the earliest:
 
 1. `ludsa_version_major` implemented
 2. declared length within `MAX_LENGTH` and not below the minimum
@@ -793,10 +793,15 @@ request to compare against.
 
 Step 3 is the only step that requires waiting. Every other check runs on octets
 already read, so a receiver MAY report a fault it has already detected without
-waiting for the declared length to arrive. A message that is both truncated and
-faulty in the octets that arrived may therefore take either status, and both
-conform. A message truncated with no fault in the octets that arrived is
-`REQUEST_INCOMPLETE`.
+waiting for the declared length to arrive, and the order binds what it holds
+rather than what a later octet would have given it. A message that is both
+truncated and faulty in the octets that arrived may therefore take either
+status, and both conform. A message truncated with no fault in the octets that
+arrived is `REQUEST_INCOMPLETE`. The same follows wherever an earlier step's
+fault lies beyond the octets a receiver acted on: a receiver that read a
+`msg_type` it does not implement and answered may not have reached a framing
+fault after it, and one that read the message whole answers the framing fault as
+the order requires. Both conform.
 
 **Neither of those is forced, deliberately.** Forcing the fault would oblige a
 receiver that reads a message whole to parse a prefix it has already given up
@@ -1528,17 +1533,18 @@ the client's counterpart is the name paired with the same condition below.
 | 23 | An unrecognised `service` in a message that also omits `credential` | server | `REQUEST_MALFORMED` | F1 |
 | 24 | A response of exactly one octet, then end of file | client | `RESPONSE_INCOMPLETE` | |
 | 25 | A response carrying a `msg_type` the client does not implement | client | `RESPONSE_UNSUPPORTED` | |
-| 26 | A tag with bit 6 set and either of bits 5-4 set, in a message whose `msg_type` the receiver does not implement | either | `REQUEST_MALFORMED` | |
+ |
 | 27 | A declared length above `MAX_LENGTH`, in a message whose octets also carry a NUL | either | `REQUEST_TOO_LARGE` | |
 | 28 | The connection accepted and the request read, then closed with no response octet | client | `RESPONSE_ABSENT` | |
 | 29 | The connection accepted and the request read, then held open past the client's deadline | client | `RESPONSE_TIMEOUT` | F6 |
 
-Cases 17 and 30 are retired. 17 drove an unrecognised `service`, which §6.2.1
-and §6.3 now answer with `SERVICE_UNSUPPORTED` rather than a rejection. 30 drove
-a truncated message whose arrived octets carried a fault, which §4 leaves to the
-receiver. Neither number is reused, on the ground §4.1 gives for never
-reassigning a field number: a citation that outlives what it named should fail
-to resolve rather than resolve to something else.
+Cases 17, 26 and 30 are retired. 17 drove an unrecognised `service`, which
+§6.2.1 and §6.3 now answer with `SERVICE_UNSUPPORTED` rather than a rejection.
+26 drove a shape-bad tag behind an unimplemented `msg_type`, and 30 a truncated
+message whose arrived octets carried a fault. §4 leaves both to the receiver. No
+retired number is reused, on the ground §4.1 gives for never reassigning a field
+number: a citation that outlives what it named should fail to resolve rather
+than resolve to something else.
 
 Every version 1.0 `utf8` field is one a client may reject for its content. §5
 makes a defect in `error_detail`, `server_desc` or `authn_id` a fault in the
@@ -1552,8 +1558,10 @@ failure. Case 24 is its counterpart on the other side, where one octet is a
 report rather than a silence.
 
 A message both truncated and faulty in the octets that arrived may draw either
-status (§4). Both conform, so it is not a case here and a driver MUST NOT record
-either as a failure.
+status (§4). So may one whose framing fault lies behind a `msg_type` the
+receiver does not implement, since a receiver that answered on the type it read
+never reached the fault. Both conform in each, so neither is a case here and a
+driver MUST NOT record either as a failure.
 
 A message declaring a minor version the receiver implements, carrying a tag that
 version does not define at a field number above that message type's ceiling

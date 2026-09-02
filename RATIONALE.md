@@ -2899,6 +2899,24 @@ believe they conform. The tenth round found no case driving this one. The case
 supplies both conditions in one request, which is the shape the numbered table
 already uses to pin steps against each other.
 
+**Why the order binds what a receiver holds.** §4 said a message failing more
+than one check takes the earliest outcome, and the sixth round then let a
+receiver report a fault it had already detected rather than wait for octets that
+would not change it. Both spec reviewers found the two in conflict: a server
+reading as it goes answers `REQUEST_UNSUPPORTED` at the `msg_type`, and a
+framing fault in the next octet would have answered `REQUEST_MALFORMED` under
+the order. Both proposed making the dispatch statuses wait for the framing pass,
+which reverses the sixth round's ruling and puts a server that already holds a
+settled verdict back to waiting for a declared seventeen kilobytes to report it.
+That is the cost the sixth round declined, and nothing about an unimplemented
+type becomes truer by waiting. It is also the shape the eighth round settled for
+a message both truncated and faulty: a rule either way conscripts one way of
+reading a socket, and the protocol has no stake in which a receiver is. Here the
+two answers reach the same PAM code, so the case for choosing is weaker than the
+one the eighth round already declined. So the order is stated as binding the
+outcomes a receiver holds, and case 26 is retired, since it required the answer
+only one reading gives.
+
 **Why the decision cases name a recognised `service`.** They expected a `result`
 that was not `OK`, which was exact until `SERVICE_UNSUPPORTED` became a `result`
 in the seventh round. An `AUTHENTICATE_REQUEST` requires a `service`, so a

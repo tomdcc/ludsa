@@ -605,12 +605,18 @@ only the message type says, and step 7 is where that is decided.
 
 So a message with both a repeated tag and an unimplemented `msg_type` is
 `REQUEST_UNSUPPORTED`, and one with a repeated tag in a type the server does
-implement is `REQUEST_MALFORMED`. §7 cases 22 and 5 are the pair that pin it.
+implement is `REQUEST_MALFORMED`. §7 cases 22 and 5 are the pair that pin it. A
+repeat is judged against a schema, so a receiver holding none for that type has
+nothing to judge it with, which is why the pair holds however the message was
+read.
 
 Run the schema-independent pass over the whole message first, then dispatch,
 then apply the schema. A server that dispatches on `msg_type` before checking
 tag shape or extents answers `REQUEST_UNSUPPORTED` to a message that is
-structurally broken, which case 26 catches through its own combination.
+structurally broken. §4 permits that, because such a server never reached the
+framing fault, and §7 has no case against it. Running the pass whole is still
+the better shape: it costs nothing on a bounded message, and it puts a codec
+fault in the log rather than a version-skew diagnosis.
 
 ## Emitting fields
 
