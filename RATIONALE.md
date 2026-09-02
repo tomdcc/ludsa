@@ -742,12 +742,12 @@ refused the connection asked for nothing, and the ground does not reach it.
 
 The tenth round found the document saying that in one place and implying the
 opposite in another. §5 had a concurrency decline reached at accept, "so nothing
-has asked for anything yet", while §2 reached "owes no drain" by way of the
-deadline being a drain terminator, which is a reason that presupposes a drain.
-§3's own lead-in held the answer attached to the wrong sentence: the clause
-about a server shedding load hung off the credentials case, so a reader looking
-for the load-shedding rule could find it only by misreading the one beside it.
-Both reviewers who raised this read it that way.
+has asked for anything yet". §2 reached "owes no drain" by way of the deadline
+being a drain terminator, which is a reason that presupposes a drain. §3's own
+lead-in held the answer attached to the wrong sentence. The clause about a
+server shedding load hung off the credentials case, so a reader looking for the
+load-shedding rule could find it only by misreading the one beside it. Both
+reviewers who raised this read it that way.
 
 What the wrong reading cost is not ambiguity alone. Draining a refused
 connection means reading to `2 x MAX_LENGTH` on the path where the server has
