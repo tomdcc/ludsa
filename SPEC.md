@@ -1564,6 +1564,13 @@ document does not specify. A driver MUST be given all of them:
   genuinely outstanding, since no request this document permits is large enough
   to arrange that on its own. A client that cannot be configured that way cannot
   run the case below in its reliable form and is not non-conforming for that.
+- **F11**: which message types the peer under test implements, and for a client
+  which response fields it consumes. §6 obliges a server to implement no
+  particular request type, and §5 relieves a client of checking a value it does
+  not use, so neither is derivable from the wire. For a client this also settles
+  which response types a driver can put in front of it: one that sends no
+  `PING_REQUEST` never receives a `PING_RESPONSE`, so `server_desc` cannot be
+  driven at it at all.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1829,6 +1836,11 @@ prohibition: a client MUST NOT report a `REQUEST_` code for any of them.
 | A response `utf8` field carrying a NUL octet | client | `RESPONSE_MALFORMED` |
 | A response `utf8` field above its §3.1 maximum | client | `RESPONSE_MALFORMED` |
 
+These name no field, and a driver chooses one F11 says the client consumes, in a
+response type F11 says it can be made to receive. §5 relieves a client of
+checking a value it does not use, so a driver that picks otherwise records a
+SHOULD the client never owed.
+
 A receiver MUST accept a message whose `ludsa_version_minor` differs from its
 own, in either direction, and MUST skip an unrecognised **optional** tag without
 error, including one that appears more than once. The skipping obligation
@@ -1840,7 +1852,13 @@ does, and a receiver that rejects there conforms.
 
 A receiver MUST accept a message whose declared length is exactly the minimum
 for the version, which a `PING_REQUEST` carrying no fields is, and a field whose
-value is exactly its §3.1 maximum. It
+value is exactly its §3.1 maximum. What the driver asserts is that the length
+was not what the receiver rejected: a server answering `REQUEST_UNSUPPORTED` has
+accepted the length and failed at §4's step 5 instead, and §6 obliges it to
+implement no particular request type. So the driver drives a type F11 says the
+peer implements. A peer implementing none that can carry a minimum-length
+message cannot be driven for this rule and is not non-conforming for that, since
+`AUTHENTICATE_REQUEST` has required fields and cannot be one. It
 MUST report an enumerated value it does not recognise as that enumeration's 1
 (§3.4) and MUST NOT report it as an affirmative outcome, so a `result` of 200 is
 `AUTHN_UNKNOWN` and never `OK`, and so is a `result` of 0.

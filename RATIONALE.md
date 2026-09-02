@@ -2430,6 +2430,33 @@ actually invalidates the credential for that backend. For a signed token it
 does. A backend that ignores trailing whitespace on its own account cannot run
 the case, and the concession says so, on the same terms F2, F5, F8 and F10 use.
 
+**Why a driver has to be told what the peer implements and reads.** §7 spent
+several cases on facts about the peer that nothing on the wire carries. The four
+SHOULD-report cases drive a defective `utf8` field at a client, and §5 relieves
+a client of checking a value it does not use, so a driver picking a field this
+client ignores records a SHOULD it never owed. The rows name no field, which
+leaves the choice to a driver that has no basis for it.
+
+`server_desc` is the sharp end. It appears only in a `PING_RESPONSE` and a
+`STATUS_RESPONSE`, so a client that sends neither request can never be given
+one. F8 hands a value to a request field through the host interface, which is a
+different thing from provoking a message type, and no fixture did the second.
+
+The acceptance rule had the same shape from the other side. It names a
+`PING_REQUEST` as the minimum-length message, and §6 obliges a server to
+implement no particular request type. A server that answers
+`REQUEST_UNSUPPORTED` has accepted the length and failed at §4's step 5, so it
+conforms and the rule as written would have recorded a failure. What was missing
+was the observable: the assertion is that the length is not what the receiver
+rejected.
+
+A server implementing only AUTHENTICATE cannot be driven for the rule at all.
+The minimum declared length is `msg_type` and `TAG_END`, which a `PING_REQUEST`
+or a `STATUS_REQUEST` can carry because their fields are optional or absent, and
+which an `AUTHENTICATE_REQUEST` cannot because two of its fields are required.
+Neither reviewer reached that, and the concession says so rather than leaving a
+driver to discover it.
+
 **Why the mid-write case asks a client to write badly on purpose.** §2.1's rule
 is the one whose violation kills an `sshd`, and the tenth round found its only
 case unable to exercise it. The case had the driver read part of the request and
