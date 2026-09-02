@@ -2090,6 +2090,15 @@ usually stops the stack before `pam_sm_acct_mgmt` runs at all; its column is
 what a control flag that does not stop the stack reaches, and it fails there
 too.
 
+A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
+obtained in the same PAM transaction, for the `user` it is now asked about.
+Where it holds none it MUST NOT return `PAM_SUCCESS` or `PAM_IGNORE`, and SHOULD
+return `PAM_SYSTEM_ERR`: a stack that reaches this module's `account` phase
+without its `auth` phase having run, or with `PAM_USER` changed between the two,
+is a configuration that needs a person. A deployment MAY override that code on
+the terms above, and the bound above still holds, so no override turns the
+absence of a verdict into an admission.
+
 The emphasised cell is the appendix's one fail-open hazard, and the paragraphs
 below are about it.
 

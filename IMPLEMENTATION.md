@@ -1046,8 +1046,9 @@ way.
 A credential outcome usually stops the stack at the `auth` phase, so the
 question looks academic, and a control flag that does not stop the stack reaches
 it. Returning `PAM_SUCCESS` there because "the credential failure was already
-reported" is the fail-open, and the rule that no cached verdict fails is the
-same rule: `PAM_SUCCESS` comes from `OK` and from nothing else.
+reported" is the fail-open, and Appendix B's rule that no cached verdict fails,
+with `PAM_SYSTEM_ERR` as the code to prefer, is the same rule: `PAM_SUCCESS`
+comes from `OK` in this transaction, for this user, and from nothing else.
 
 **A defective `authn_id` now costs an authentication.** §5 has a client check
 any of the three `utf8` values it uses. Any defect is `RESPONSE_MALFORMED`, and

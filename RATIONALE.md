@@ -2087,9 +2087,10 @@ The host-side situation such a request type would serve does already exist. sshd
 running publickey, GSSAPI or hostbased authentication reaches `pam_acct_mgmt()`
 without having run the auth stack, and cron never runs the auth stack at all.
 What does not exist is a LUDSA server that can answer without a credential.
-`pam_ludsa` meets those hosts by failing closed, because `pam_sm_acct_mgmt`
-fails when no cached verdict exists. That is the correct answer, and it means
-the module can't serve an sshd `account` stack alongside publickey login.
+`pam_ludsa` meets those hosts by failing closed, because Appendix B has
+`pam_sm_acct_mgmt` fail when it holds no verdict for the transaction. That is
+the correct answer, and it means the module can't serve an sshd `account` stack
+alongside publickey login.
 
 ### 6.1 PING
 
@@ -2824,6 +2825,22 @@ admits a caller the server denied. That is a fail-open produced by a convention
 rather than by a wire rule, and no conformance case can see it. Binding the
 client to document it puts the obligation on someone the specification can bind,
 which a rule aimed at a deployment would not.
+
+**Why the `account` phase fails closed with no verdict.** The mapping table
+presupposes a `result`, and for ten rounds nothing said what `pam_sm_acct_mgmt`
+returns when it holds none for this transaction, or holds one obtained for a
+different `PAM_USER`. A stack whose `auth` line belongs to another module
+reaches this module's `account` phase with nothing cached whenever that module
+succeeds, and the appendix's whole case for `PAM_SUCCESS` at
+`pam_sm_authenticate` on `AUTHN_DENIED_POLICY` is that the `account` phase
+denies it. The eleventh round made it a rule: the verdict must come from the
+same transaction and be for the user now asked about, and with none the module
+fails closed. `PAM_SYSTEM_ERR` is the code to prefer because a stack in that
+shape is a configuration needing a person, which is the split the appendix
+already draws. `PAM_IGNORE` is forbidden alongside `PAM_SUCCESS` because it lets
+the rest of the stack decide as though the module were not there. The project
+had treated this as a rule from the start, and only the working notes carried
+it.
 
 **Why the three peer-identity outcomes share a code.** A socket the client
 cannot open, a peer that is not the one the client expects, and a server that
