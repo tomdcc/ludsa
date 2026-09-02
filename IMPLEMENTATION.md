@@ -51,14 +51,15 @@ Every other early rejection is settled while the deadline still runs, so the
 drain there is a normal read and `io.CopyN` behaves. The tell is that a server
 "fixing" the latch drains on exactly the exchange with least claim to it.
 
-**Do not invent a shorter deadline for the version word.** Setting one, and
-answering in your own major version when it fires, reads as a courtesy to a
-loaded server. It is the one shape that makes the latch wrong: the short
-deadline expires, the read direction latches, and §2's request deadline is still
-running, so a drain is owed and cannot run. §2 defines no such bound for that
-reason. Where you cannot afford to wait, answer in your own major version at
-once or stop accepting, both of which §2 gives you. §5's peer refusal may set a
-bound of its own, because it owes no drain either way.
+**A shorter deadline for the version word is for a refusal reached at accept and
+for nothing else.** Setting one on an ordinary exchange, and answering in your
+own major version when it fires, reads as a courtesy to a loaded server and is
+the one shape that makes the latch wrong: the short deadline expires, the read
+direction latches, and §2's request deadline is still running, so a drain owed
+on a later rejection cannot run. A refusal reached at accept owes no drain (§3),
+so §5's peer refusal and §2's concurrency refusal may each bound their wait, and
+there the latch is harmless. Where you cannot afford to wait at all, answer in
+your own major version at once or stop accepting, both of which §2 gives you.
 
 **Keep the request deadline and the dependency deadline apart.** They are
 sequential phases of one exchange and must not share a `context`. One

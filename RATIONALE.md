@@ -274,6 +274,16 @@ an exception. The hazard was never a shorter bound; it was a shorter bound where
 a drain is owed. A server refusing the peer owes none, so nothing is left in
 flight for the bound to strand.
 
+The eleventh round found §2 still giving the drain as the reason no shorter
+bound exists, after the tenth had made every refusal reached at accept owe none.
+The only server that decides to answer before it has read a version word is one
+refusing at accept, so the reason was false for every server the sentence bound,
+and the concurrency refusal was denied the bound the peer refusal had on ground
+the two now share. §2 grants it to any refusal reached at accept. The rule for
+an ordinary exchange is unchanged: a server that has refused nothing waits for
+the version word under the request deadline, and the guidance still says why a
+shorter one there strands a drain.
+
 **Why a server answers `UNAVAILABLE` as soon as it knows.** The obligation is on
 promptness rather than on holding a timer. A backend that returns an error at
 200ms should not leave the server sitting on the connection until some deadline
@@ -483,6 +493,17 @@ rule with an exception. A server at its limit may also answer in its own major
 version without waiting, which is the same permission every answer without a
 version has, and it is the one to take when the limit is what it is defending
 against.
+
+The eleventh round settled what the refusal answers when the wait turns up
+something else. It is settled at accept on the same terms as §5's peer refusal:
+a version the server does not implement, read while it waits, is `RATE_LIMITED`
+in the server's own major version rather than `VERSION_UNSUPPORTED`, and an
+expiry while it waits is `RATE_LIMITED` in its own major version or a close.
+Before that, §4 and §2 gave a server at its bound two answers for a future-major
+client, and they map to different PAM codes. The trade is the one §5 already
+made: the client loses the version diagnosis on the exchanges a loaded server
+refuses, and gains the answer that tells it a later attempt may fare better,
+which is the one true thing the server knows.
 
 **Why a client has a name for a request it cannot send.** §3.1 forbids a sender
 emitting a field above its maximum and forbids anyone truncating one to fit, and

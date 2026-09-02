@@ -77,11 +77,11 @@ fewer than that value needs.
 **Answering without one.** A server that has decided to answer but has not read
 `ludsa_version_major` MAY answer in its own major version instead of closing. It
 MAY instead wait for the version word and answer in the version the client
-chose, which is the better answer where it can afford to wait. The request
-deadline is the only bound on that wait: this document defines no shorter one,
-because a shorter one would expire while the request deadline still ran and
-leave a server holding a drain it owed. §5 sets its own bound, and owes no
-drain.
+chose, which is the better answer where it can afford to wait. A server in that
+position has refused at accept, and §3 has such a refusal owe no drain, so it
+MAY bound that wait more tightly than the request deadline, as §5's peer check
+may. Where the bound or the request deadline expires with no version word read,
+it answers in its own major version or closes.
 
 §4 already has a server reply in its own major version when it cannot use the
 client's; this is the same move where it has not been given one.
@@ -157,8 +157,11 @@ The server SHOULD bound concurrent connections. At its limit it MAY respond
 `RATE_LIMITED`, and MAY instead stop accepting and leave connections in the
 kernel backlog. The limit is reached at accept, before any octet has arrived, so
 a server that chooses to answer reads `ludsa_version_major` first, or answers in
-its own major version without waiting for one. Where it waits and the request
-deadline expires, it closes. §3 has a refusal reached at accept owe no drain,
+its own major version without waiting for one. The refusal is settled at accept
+on §5's terms: a version it does not implement, read while it waits, is answered
+`RATE_LIMITED` in its own major version, and an expiry while it waits, of the
+request deadline or of a bound of its own (above), is `RATE_LIMITED` in its own
+major version or a close. §3 has a refusal reached at accept owe no drain,
 whatever the server read while waiting.
 
 **Connect-time retry.** A client MAY retry a connection that failed for a reason
