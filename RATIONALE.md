@@ -13,9 +13,9 @@ vectors are what expose them. Each one says so where it applies.
 
 **Why the socket path must be absolute and must not be truncated.** §2
 legislates the path in detail and said nothing about either, which the ninth
-round found.
-Both produce the same failure, and it is the one §2's peer-identity rule exists
-to close: a client connects successfully to something other than the server.
+round found. Both produce the same failure, and it is the one §2's peer-identity
+rule exists to close: a client connects successfully to something other than the
+server.
 
 A relative path resolves through ordinary pathname lookup against the calling
 process's working directory, since the socket calls have no directory argument.
@@ -280,6 +280,12 @@ non-blocking `connect` against a full backlog returns `EAGAIN`: a closed list of
 two would recommend an overload behaviour and forbid recovering from it. `EINTR`
 is the same shape, arriving from a host that installs handlers without
 `SA_RESTART`, which is the host's business and not a guest library's.
+
+§2's gloss on `EINTR` once said that nothing about the connection was
+established, which is not what POSIX says of a blocking `connect()`: the
+connection goes on being established on the descriptor. The gloss now says the
+attempt was interrupted before it was answered, and the guidance says to close
+that descriptor before retrying.
 
 What the rule is actually for is forbidding a retry of something a second
 attempt cannot change, which is a decision, a timeout, or a protocol fault. Said
@@ -800,9 +806,9 @@ all of them. The same purpose was being stated in three places at three
 strengths, and three statements are three chances to drift. A server that
 rejected a message drains. A server that refused the connection owes nothing and
 may read anyway. A client owes nothing. What the lead-in does not do is restate
-the MUST, which stays in one place below it. The tenth round
-widened the middle grading from the credentials refusal alone to any refusal
-reached at accept, which is the entry above.
+the MUST, which stays in one place below it. The tenth round widened the middle
+grading from the credentials refusal alone to any refusal reached at accept,
+which is the entry above.
 
 **Why the count is twice `MAX_LENGTH`.** §4.1 freezes `MAX_LENGTH` within major
 version 1, but a later major version may raise it, and the exchange where that
@@ -942,11 +948,10 @@ path went to the more suspicious input, and one field's handling was split
 across two sections that disagreed.
 
 The rule now covers every one of those fields and every defect. A server is
-bound to
-emit none of them, so a client meeting one has found a bug rather than a value
-to work around. Reporting it is what gets the bug fixed, and a defect that is
-quietly absorbed is a defect nobody fixes. What a client does beyond reporting
-is its own business, and the specification does not say.
+bound to emit none of them, so a client meeting one has found a bug rather than
+a value to work around. Reporting it is what gets the bug fixed, and a defect
+that is quietly absorbed is a defect nobody fixes. What a client does beyond
+reporting is its own business, and the specification does not say.
 
 The cost is real and was accepted. A server emitting a bad `authn_id` fails
 every authentication against a client that reads the field, grants included.
@@ -1333,9 +1338,8 @@ and a major version says the format itself changed.
 server answer `VERSION_UNSUPPORTED` in its own major version, and §3 forbids a
 receiver from interpreting anything past a version word it does not implement.
 The client the reply is aimed at is one whose version the server rejected, so it
-cannot read the status. Only a client
-implementing the server's version can, which means a multi-version client or a
-driver simulating another version.
+cannot read the status. Only a client implementing the server's version can,
+which means a multi-version client or a driver simulating another version.
 
 Nothing is lost, because the conclusion travels twice. §3 fixes
 `ludsa_version_major` at offset 0 of every message in every version, so a client
@@ -1415,6 +1419,11 @@ addition is optional. Where the message also declares a minor version the
 receiver implements, the sender has broken §3.2 by carrying the tag at all, and
 a deployment that wants strict input in an authentication path may reject on
 that ground.
+
+The eleventh round found a fourth copy in §5. It told a receiver to skip any
+unrecognised optional tag in an `ERROR` message, with no mention of the ceiling,
+so an `ERROR` carrying an optional field numbered 1 was skipped under §5 and
+rejected under §3.3. §5 now points at §3.3 and states nothing of its own.
 
 **Why the pivot is a named quantity.** It was stated six times in the normative
 text, in two phrasings that are not interchangeable: "above every number the
@@ -1831,12 +1840,12 @@ and this one does not.
 **Why reading a version is safe once the refusal is settled.** The ninth round
 first forbade it. Both reviewers had proposed making §5's accept bullet defer to
 the bounded interval §2 then carried, and the author reversed that: a server
-which has refused
-a peer must not parse octets from it to decide what the refusal looks like. The
-prohibition went further than its reason. What the reason forbids is letting a
-refused peer change the answer, and a version word read to choose an encoding
-changes nothing. The status is `PEERCRED_DENIED` whatever arrives, whatever
-version it names, and whether or not anything arrives at all.
+which has refused a peer must not parse octets from it to decide what the
+refusal looks like. The prohibition went further than its reason. What the
+reason forbids is letting a refused peer change the answer, and a version word
+read to choose an encoding changes nothing. The status is `PEERCRED_DENIED`
+whatever arrives, whatever version it names, and whether or not anything arrives
+at all.
 
 That displacement is why nothing else surfaces here. `VERSION_UNSUPPORTED` and
 `REQUEST_TIMEOUT` describe something the peer did after the refusal was settled,
@@ -1850,8 +1859,9 @@ bound, which is reached alongside this check and which the entry had not
 considered. It falls the same way and for a sharper reason: `RATE_LIMITED` tells
 a peer a later attempt may fare better, which is never true of a refusal on
 identity, and it sends an operator to capacity when the fault is permissions. §5
-now says nothing displaces the refusal rather than naming the answers that do
-not, which is the same move made on §2's list of when a server may say nothing.
+now leads with the property, that nothing displaces the refusal, and names those
+three answers only as instances of it, which is the same move made on §2's list
+of when a server may say nothing.
 
 A drain is a separate question and the answer falls out. §3's drain binds a
 server that rejected a message, and this refusal precedes any message, so none
@@ -2188,9 +2198,9 @@ stops there.
 **Why no party may normalise the credential.** A signature covers exact bytes,
 so any change breaks verification. The worse failure is asymmetric. A client
 that trims and a server that does not is a parser differential in an
-authentication path, and a
-single implementation that trims on *both* sides is self-consistent and passes
-all of its own tests. Only the conformance matrix catches it.
+authentication path, and a single implementation that trims on *both* sides is
+self-consistent and passes all of its own tests. Only the conformance matrix
+catches it.
 
 The whitespace-detection SHOULD exists because rejecting is correct, but
 reporting "signature verification failed" when the cause was a stray newline is
@@ -2340,6 +2350,14 @@ Nothing is disclosed that was not disclosed before: every reason-naming code is
 optional and `AUTHN_DENIED` is always available, so the rule reaches only a
 server that had already chosen to name a reason.
 
+The eleventh round found the precondition itself saying "no mapping exists for
+the requested `user`". In §6.2's vocabulary a mapping is the policy relation, so
+the sentence named the case it existed to exclude, and a flat-file server
+reading it that way answered `AUTHN_DENIED_USER_UNKNOWN` for a name it held on
+another credential's line. The precondition now uses the table's own word and
+says what resolving means: the server holds the name, whatever its policy says
+about who may act as it.
+
 ### 6.3 STATUS
 
 **Why STATUS carries no credential.** Its contents are low-sensitivity: health,
@@ -2480,25 +2498,27 @@ trimmed; its wire vectors pass because they test the codec against fixed bytes
 and never reach the handler. Everything it owns goes green, and it disagrees
 with every other implementation about which tokens are valid.
 
-The case is a credential the backend accepts with an octet appended, expecting a
-denial. A trimming server answers `OK`. The expectation names the `AUTHN_DENIED`
-codes rather than "not `OK`" for the reason the decision cases do: a server
-holding no such service answers `SERVICE_UNSUPPORTED`, which is not `OK` and
-reaches no decision, so the looser wording would pass a peer that never examined
-a credential. That formulation was ruled out in the seventh round and the
-reviewer's proposal reintroduced it.
+The case is a credential the backend accepts with a newline appended, expecting
+a denial. A trimming server answers `OK`. The expectation names the
+`AUTHN_DENIED` codes rather than "not `OK`" for the reason the decision cases
+do: a server holding no such service answers `SERVICE_UNSUPPORTED`, which is not
+`OK` and reaches no decision, so the looser wording would pass a peer that never
+examined a credential. That formulation was ruled out in the seventh round and
+the reviewer's proposal reintroduced it.
 
 It sits beside the client-side case rather than with the decision cases, whose
 lead-in says they are the only test of a different rule in the same section. A
 third row there would have made that sentence false.
 
-F3 carries the fact the case turns on, which is whether appending an octet
-actually invalidates the credential for that backend. For a signed token it
-does. A backend that ignores trailing whitespace on its own account cannot run
-the case, and the concession says so, on the same terms F2, F5, F8 and F10 use.
+F3 carries the fact the case turns on, which is whether appending a newline
+actually invalidates the credential for that backend, and it names the newline
+so that a backend refusing other octets and ignoring whitespace cannot be marked
+as trimming. For a signed token it does. A backend that ignores trailing
+whitespace on its own account cannot run the case, and the concession says so,
+on the terms every fixture uses for a peer that cannot run a case.
 
 **Why a driver has to be told what the peer implements and reads.** §7 spent
-several cases on facts about the peer that nothing on the wire carries. The four
+several cases on facts about the peer that nothing on the wire carries. The
 SHOULD-report cases drive a defective `utf8` field at a client, and §5 relieves
 a client of checking a value it does not use, so a driver picking a field this
 client ignores records a SHOULD it never owed. The rows name no field, which
@@ -2520,7 +2540,7 @@ rejected.
 A server implementing only AUTHENTICATE cannot be driven for the rule at all.
 The minimum declared length is `msg_type` and `TAG_END`, which a `PING_REQUEST`
 or a `STATUS_REQUEST` can carry because their fields are optional or absent, and
-which an `AUTHENTICATE_REQUEST` cannot because two of its fields are required.
+which an `AUTHENTICATE_REQUEST` cannot because it has required fields.
 Neither reviewer reached that, and the concession says so rather than leaving a
 driver to discover it.
 
@@ -2540,7 +2560,7 @@ to. Bounding the octets written before a flush, and pausing between them, is a
 test affordance a client that wants to be tested here can supply, and it makes
 the window the driver needs. Nothing about it belongs in the protocol: one write
 is the better behaviour at runtime, and a client without the switch is not
-non-conforming, which is the concession F2, F3, F5 and F8 already carry.
+non-conforming, which is the concession every such fixture carries.
 
 F8 stays on the case with its reason corrected. It never made the client "still
 writing", which is what the old text claimed. A larger request makes it likelier
@@ -2577,6 +2597,11 @@ binds at the array's size and at one less, and configures the client with a
 longer path sharing that prefix. Stated as a property because the size varies
 four ways across platforms, on the same ground as §2's own rule.
 
+A platform may refuse to bind at the array's full size at all, which the
+guidance measured on macOS. A truncating client cannot connect at that length
+there either, so the assertion holds with no socket bound, and the case says so
+rather than asking a driver to do what its platform forbids.
+
 The report ends the case rather than a deadline. A driver waiting to prove a
 negative would have to decide how long a connection that is never coming takes
 not to arrive; waiting for the client to report instead makes the assertion
@@ -2593,11 +2618,17 @@ turns each from a silent assumption into an input.
 
 F5 is the odd one. §2's identity check binds only a client that was configured
 with an expected identity, so the fixture supplies both halves of that
-configuration, and the case turns on who owns the socket rather than on the
-octets crossing it. It went in during the fifth round, when a reviewer pointed
-out that the conditional MUST had been chosen over a bare SHOULD precisely
-because it is observable, and that nothing in §7 observed it. The rule was sound
-and its justification was not delivered.
+configuration, and the case turns on which uid is at the far end of the socket
+rather than on the octets crossing it. It went in during the fifth round, when a
+reviewer pointed out that the conditional MUST had been chosen over a bare
+SHOULD precisely because it is observable, and that nothing in §7 observed it.
+The rule was sound and its justification was not delivered.
+
+§2 names no mechanism, and the two a client can use read different things: peer
+credentials report the listening process, and an ownership check reads the path.
+The eleventh round found the fixture supplying only the owner, which passes a
+peer-credential client against a driver listening as itself, so the fixture now
+supplies both.
 
 **Why a client's names are not normative, and why that costs a fixture.** The
 names a client reports never cross the socket, so no peer can depend on them and

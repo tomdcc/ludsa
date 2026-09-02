@@ -197,11 +197,10 @@ message resident.
 **A small buffer does not license rejecting a larger message.** §3 requires
 accepting any declared length up to `MAX_LENGTH`, so a client sized at 527 has
 to cope with a response longer than that rather than answering
-`RESPONSE_TOO_LARGE`, which §7 reserves for a declared length above
-`MAX_LENGTH` and not for one above the buffer. Read and discard what the buffer
-does not hold, and do not
-interpret anything past the declared length. §3's constraint is on what a
-receiver interprets, not on holding a message whole.
+`RESPONSE_TOO_LARGE`, which §7 reserves for a declared length above `MAX_LENGTH`
+and not for one above the buffer. Read and discard what the buffer does not
+hold, and do not interpret anything past the declared length. §3's constraint is
+on what a receiver interprets, not on holding a message whole.
 
 `MAX_LENGTH` still bounds the discard path, so a client parsing a 32768-octet
 declared length reads it to completion. That costs wall time rather than memory,
@@ -286,9 +285,10 @@ close.
 ## Writing to the socket
 
 **A server closing while a client is still writing is expected, not
-exceptional.** §2 lets a server close without replying before it has read a
-version, at its concurrency bound, on a peer refusal made at accept, and when
-its response deadline expires. §3 has it close when the drain ends, which
+exceptional.** §2 lets a server close without replying in cases it does not
+enumerate. The ones this document itself produces are before it has read a
+version word, at its concurrency bound, on a peer refusal made at accept, and
+when its response deadline expires. §3 has it close when the drain ends, which
 narrows that window rather than removing it. A client sending a large
 `credential` will meet this. Every client therefore has to decide what a failed
 write does to it.
@@ -345,7 +345,10 @@ that installs handlers without `SA_RESTART`, which is the host's prerogative and
 not something a guest library may change. Resuming on the same connection is not
 the retry §2 forbids; that rule is about opening a new connection. A client that
 treats either as fatal fails an authentication because an unrelated child
-exited.
+exited. An `EINTR` from `connect()` is the other way round. POSIX has the
+connection go on being established on that descriptor. So the retry §2 permits
+closes the interrupted descriptor and connects a fresh one, rather than calling
+`connect()` on it again.
 
 **Read the response even when the write failed.** §3 has a server that rejects a
 message early send its response and then discard up to `2 x MAX_LENGTH` octets
@@ -448,9 +451,10 @@ restart looks like a crash. Calling
 explicitly avoids that.
 
 And reaching the descriptor to `fchmod` it is a trap of its own:
-`(*net.UnixListener).File()` dups the descriptor and puts the *original* into
-blocking mode, which disables the listener's deadline handling for the rest of
-the process's life. `SyscallConn()` is the call that does not.
+`(*net.UnixListener).File()` dups the descriptor, which leaves a second one to
+close. Before Go 1.11 it also put the original into blocking mode, which
+disabled the listener's deadline handling for the rest of the process's life.
+`SyscallConn()` reaches the same descriptor without either.
 
 **Check the mode as a set of bits, and mask the file type off first.** §2's
 bound is any of `07777` set that `0660` does not:
@@ -472,7 +476,7 @@ a correct one, because `st_mode` carries the file type and `S_IFSOCK` is
 just as firmly. A server that omits the mask refuses to start on
 a socket it has just created correctly.
 
-## Detecting a stale socket
+## A socket already at the path
 
 §2 requires any socket already at the published path to be gone before the
 server publishes its own, and requires the is-a-socket test before anything at
@@ -526,8 +530,8 @@ inode.
 
 The sticky bit is what makes a shared directory such as `/tmp` survivable, since
 it stops another user unlinking an existing socket. It does not close the window
-the server opens itself: it unlinks its own stale socket before binding, and an
-attacker with write permission can bind at the free path during that window.
+the server opens itself: it unlinks its own leftover socket before binding, and
+an attacker with write permission can bind at the free path during that window.
 Prefer a directory the server owns.
 
 A server that inspects the directory anyway is doing something useful, and Go
@@ -837,10 +841,12 @@ credential that fails validation is a decision, so the client receives an
 
 §5 requires `error_detail` to carry no control character, meaning U+0000 to
 U+001F, U+007F and U+0080 to U+009F, which is what "safe to log verbatim"
-amounts to once `utf8` has supplied valid encoding and no NUL. §3.1 pushes a
-server toward naming the offending value when it rejects a field for length.
-Those two rules meet awkwardly, because §3.3 forbids the server from rejecting
-control characters or invalid UTF-8 on input in the first place.
+amounts to once `utf8` has supplied valid encoding and no NUL. §3.1 has a server
+name the bound when it rejects a field for length, and lets it name the field.
+§5 has it describe a condition and never the octets. A server that embeds
+anything from the request anyway meets those rules awkwardly, because §3.3
+forbids it from rejecting control characters or invalid UTF-8 on input in the
+first place.
 
 **Go: `fmt` will pass the bytes straight through.** `%s` and `%v` on a `string`
 copy it untouched, with no escaping, no validation and no error. So the most
@@ -1092,9 +1098,8 @@ right: it is what someone reads before writing their own.
 will not disclose the option of answering `AUTHN_DENIED` for every denial, and a
 server that takes it while returning in a microsecond for an unknown user and
 thirty milliseconds for a policy lookup has disclosed the same thing the code
-was withholding. A
-production server may want to equalise the two, by deferring the answer to a
-fixed floor or by doing the work either way.
+was withholding. A production server may want to equalise the two, by deferring
+the answer to a fixed floor or by doing the work either way.
 
 How far to take that is a deployment question and this document does not
 prescribe it. The floor costs latency on every denial, the work costs load, and
@@ -1210,8 +1215,8 @@ threshold has no way to shed the cost.
 The concurrency refusal is the same shape and §3 now says so: a refusal reached
 at accept owes no drain on either ground. Do not run a discard loop on the
 `RATE_LIMITED` path by analogy with the rejection path, which does owe one. The
-bound there is `2 x MAX_LENGTH`, so reading a refused connection to its end
-costs 65534 octets at the moment you have least to spend them on, and a server
+bound there is `2 x MAX_LENGTH`, so reading a refused connection to that bound
+costs up to 65536 octets at the moment you have least to spend them on. A server
 that sheds load by draining has built the amplifier it was shedding to avoid.
 
 **A peer rule that turns on `service` is a second gate, not a later check.** The
@@ -1261,8 +1266,11 @@ likes. That is an authentication bypass rather than only a disclosure.
 
 §8 leaves the mechanism unspecified, because no single check works everywhere.
 §2 keys the obligation to configuration instead. §7 drives it with F5, a driver
-socket owned by a uid the client was not configured to expect, and asserts the
-client writes no octet.
+socket bound, listened on and owned by a uid the client was not configured to
+expect, and asserts the client writes no octet. Where a supervisor binds the
+socket and hands the descriptor to another process (§1), a peer-credential check
+reports the supervisor's uid, and that is the uid a deployment configures the
+client with.
 
 These are the checks a client can be configured for. It should support whichever
 its deployment allows:

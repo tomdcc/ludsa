@@ -160,8 +160,8 @@ whatever the server read while waiting.
 **Connect-time retry.** A client MAY retry a connection that failed for a reason
 a later attempt could change: `ECONNREFUSED` and `ENOENT`, because the server
 may not have published its socket yet; `EAGAIN`, because a full backlog may
-drain; and `EINTR`, because nothing about the connection was established. It is
-subject to:
+drain; and `EINTR`, because the attempt was interrupted before it was answered.
+It is subject to:
 
 - A client MUST NOT retry a permission failure, a timeout, a protocol error or a
   denial. None of those changes on a second attempt.
@@ -335,11 +335,11 @@ the writer. A server that rejected a message was willing to serve that peer, and
 asked for the request it would be cutting off, so it drains. A server that
 refused the connection asked for nothing, and no refusal reached at accept owes
 a drain: §5's peer check is settled there, and §2's concurrency bound is reached
-there. Such a server MAY still read and discard so that a
-client mid-write is not cut off, on the bounds below, and one shedding load may
-decline, since the load is what its refusal is about. Reading the version word
-to choose an encoding does not change that, on either ground. A client owes
-nothing either, since nothing is waiting on its read (above).
+there. Such a server MAY still read and discard so that a client mid-write is
+not cut off, on the bounds below, and one shedding load may decline, since the
+load is what its refusal is about. Reading the version word to choose an
+encoding does not change that, on either ground. A client owes nothing either,
+since nothing is waiting on its read (above).
 
 A server that rejects a message before it has read all of it MUST NOT allocate
 storage for the body. It MUST send its response, then read and discard until the
@@ -453,8 +453,8 @@ needs to look (§5).
 `error_detail`, `server_desc` and `authn_id` are the only fields in this table
 that a server sends and a client receives. A defect in any field a server sends
 is a fault in the server that produced it, so a client MUST NOT report a
-request-side code for it. Nothing in
-the client's own request caused it. §5 says what a client does instead.
+request-side code for it. Nothing in the client's own request caused it. §5 says
+what a client does instead.
 
 When a server rejects a field for length, it SHOULD name the bound in
 `error_detail`, and MAY name the field. A field's name is not part of its value,
@@ -697,12 +697,12 @@ message declares. §4.1 fixes what a number may mean before any message declares
 anything.
 
 Where the field number is at or below that message type's ceiling (§3.3), no
-version can give the tag meaning. Either the
-number is assigned there already, and §4.1 freezes that assignment. Or it is one
-a numbering left behind, and §4.1 requires a later version to take a number
-higher than every number already assigned. The sender is broken and the receiver
-can prove it, so it MUST reject the message as `REQUEST_MALFORMED`, whatever
-minor version the message declares. §3.3 carries the rule.
+version can give the tag meaning. Either the number is assigned there already,
+and §4.1 freezes that assignment. Or it is one a numbering left behind, and §4.1
+requires a later version to take a number higher than every number already
+assigned. The sender is broken and the receiver can prove it, so it MUST reject
+the message as `REQUEST_MALFORMED`, whatever minor version the message declares.
+§3.3 carries the rule.
 
 Where the field number is above the ceiling, an optional tag may be one a later
 version assigns, and the receiver holds no schema that would settle it. It MUST
@@ -860,10 +860,9 @@ Response:
 | `status` | `enum`, 1 octet | required | `0x0181` |
 | `error_detail` | `utf8` | optional | `0x0243` |
 
-§3.2 binds a server to the fields its own version defines, which for version
-1.0 are these two, whatever the request it answers. A receiver applies §3.3 to
-any other tag it meets: it skips an optional one and rejects the message for a
-required one. A server SHOULD populate `error_detail`.
+§3.2 binds a server to the fields its own version defines, which for version 1.0
+are these two, whatever the request it answers. §3.3 governs any other tag a
+receiver meets. A server SHOULD populate `error_detail`.
 
 `status` states how the server handled the message. It states nothing about what
 the server decided, because an `ERROR` message means it decided nothing.
@@ -931,12 +930,12 @@ A server whose check fails does one of three things:
 The third reads a version to choose an encoding and for nothing else. A version
 this server does not implement, and an interval that expires with none read, are
 both answered `PEERCRED_DENIED` in the server's own major version. Nothing
-displaces it: not `VERSION_UNSUPPORTED`, not `REQUEST_TIMEOUT`, and not the
-`RATE_LIMITED` §2 gives a server at its concurrency bound, which is reached at
-accept alongside this check. The refusal was settled before any of them could
-arise, nothing the peer sends can change it, and `RATE_LIMITED` would tell a
-peer that a later attempt may fare better, which is never true of a refusal on
-identity.
+displaces it, because the refusal was settled before any other answer could
+arise and nothing the peer sends can change it. `VERSION_UNSUPPORTED` and
+`REQUEST_TIMEOUT` describe what the peer did afterwards. The `RATE_LIMITED` §2
+gives a server at its concurrency bound is reached at accept alongside this
+check, and it would tell a peer that a later attempt may fare better, which is
+never true of a refusal on identity.
 
 Such a server owes no drain and MAY read and discard, on §3's terms. It parses
 nothing beyond `ludsa_version_major`, and holds no length it may rely on, so
@@ -993,7 +992,9 @@ else. It says the value needs no escaping; it does not say what a receiver may
 hand it to. A server that embeds text from elsewhere in it MUST render that text
 safely first, and MUST NOT let that text push the field above its §3.1 maximum.
 It shortens what it embeds, not the message. §3.1's rule against truncating a
-value binds a receiver rejecting one, not a server describing one.
+value reaches a server carrying one and a receiver rejecting one, and names
+`error_detail` as the exception because a server describing a condition composes
+the value.
 
 A client MUST NOT log `error_detail`, return it, or otherwise act on it until it
 has established that the value is valid UTF-8 (§3.3), holds no control character
@@ -1299,11 +1300,13 @@ valid, and a server MAY answer it without having examined one.
 established that the credential was valid, since that is what the code states.
 
 It carries a second precondition for the same reason. A server MUST NOT answer
-`AUTHN_DENIED_POLICY` where no mapping exists for the requested `user`, or where
-it resolved no identity from the credential. Those are what
-`AUTHN_DENIED_USER_UNKNOWN` names. The line is whether the name resolves and not
-which order a server did its work in. A name that resolves and is then refused
-is `AUTHN_DENIED_POLICY`, and a name that does not resolve is
+`AUTHN_DENIED_POLICY` where the requested `user` does not resolve, or where it
+resolved no identity from the credential. Those are what
+`AUTHN_DENIED_USER_UNKNOWN` names. A `user` resolves where the server holds the
+name, whatever its policy says about who may act as it. So the line is whether
+the name resolves, not whether any mapping reaches it and not which order a
+server did its work in. A name that resolves and is then refused is
+`AUTHN_DENIED_POLICY`, and a name that does not resolve is
 `AUTHN_DENIED_USER_UNKNOWN` whether or not the credential was examined first.
 
 Neither precondition asks a server to disclose anything. Every code that names a
@@ -1536,17 +1539,20 @@ document does not specify. A driver MUST be given all of them:
   its policy does not map that credential's identity to. The policy must also
   refuse that identity a `user` of zero octets, which a deployment whose policy
   grants any `user` cannot supply. Such a peer cannot run the second decision
-  case and is not non-conforming for that. It also says whether appending an
-  octet to that credential makes it invalid to the peer's backend. A backend
-  that accepts the modified value cannot run the credential case below and is
-  not non-conforming for that either.
+  case and is not non-conforming for that. It also says whether appending a
+  trailing newline to that credential makes it invalid to the peer's backend,
+  which is what the credential case below appends. A backend that accepts the
+  modified value cannot run that case and is not non-conforming for that
+  either.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
   legitimately and cannot be told from one that never drained.
 - **F5**: the server identity the client under test is configured to expect, and
-  a driver socket owned by a different uid. A client configured with none owes
-  nothing under §2 and cannot run the case below.
+  a driver socket bound and listened on by a process running as a different
+  uid, at a path that uid owns. §2 names no mechanism, so the driver supplies
+  what a peer-credential check and an ownership check each read. A client
+  configured with none owes nothing under §2 and cannot run the case below.
 - **F6**: the deadlines the peer applies (§2). A driver needs the server's
   accept-to-complete-request deadline to know how long to stall, and the
   client's overall deadline to know how long to hold a connection open and how
@@ -1653,12 +1659,12 @@ and an envelope plus a kilobyte is far below `2 x MAX_LENGTH`.
 A driver checks the encoding of every response it receives on §4's terms: no tag
 lower than the tag before it, and each recognised tag appearing at most once.
 Equal tags are not a breach, since §4.1 lets a later minor version assign a
-repeatable field. Where a response declares
-a `ludsa_version_minor` the driver implements, it also records a tag that
-version does not define for that message type, which is the sender breaking
-§3.2. It records rather than rejects: whether to reject is a receiver's own
-choice (§4), and against a higher minor version the check cannot be made at all,
-since the driver does not hold the schema that would settle it.
+repeatable field. Where a response declares a `ludsa_version_minor` the driver
+implements, it also records a tag that version does not define for that message
+type, which is the sender breaking §3.2. It records rather than rejects: whether
+to reject is a receiver's own choice (§4), and against a higher minor version
+the check cannot be made at all, since the driver does not hold the schema that
+would settle it.
 
 It checks their content on the same terms, over every field it recognises: no
 enumerated value of 0 or 1 (§3.4), no `utf8` value carrying a control character
@@ -1687,8 +1693,8 @@ connection and writes nothing:
 |---|---|---|---|
 | A connection accepted by a peer whose identity is not the one the client was configured to expect | client | the client writes no octet and reports `CONNECTION_FAILED` | F5 |
 
-This is the only case that turns on who owns the socket rather than on the
-octets crossing it, so a driver needs two uids for it and for nothing else.
+This case turns on which uid is at the far end of the socket rather than on the
+octets crossing it, which is why a driver needs a second uid for it.
 
 One further case observes a client that never connects at all, which §3.1's
 prohibition reaches and no message can. The driver listens, and hands the client
@@ -1709,8 +1715,10 @@ One further case observes a client configured with a path it cannot use, which
 §2's prohibition reaches and no message can. The driver binds a socket at each
 length a truncating client could land on, which its platform gives as the size
 of the address structure's path array and one less, and configures the client
-with a longer path sharing that prefix. It reads those lengths from the platform
-rather than from this document:
+with a longer path sharing that prefix. A length the platform refuses to bind is
+one a truncating client cannot connect at either, so the assertion holds there
+without a socket. It reads those lengths from the platform rather than from this
+document:
 
 | case | against | expected | needs |
 |---|---|---|---|
@@ -1772,8 +1780,8 @@ why F3 has to say whether the appended octet makes the credential invalid to the
 peer's backend.
 
 One further case observes a client whose peer closes while it is still writing,
-which §2.1 requires it to survive and §2 permits the server to do. The driver
-accepts, reads part of the request, and closes:
+which §2.1 requires it to survive and §2 permits the server to do. Where F10
+lets it, the driver accepts, reads part of the request, and closes:
 
 | case | against | expected | needs |
 |---|---|---|---|
@@ -1806,10 +1814,10 @@ open past the client's own deadline without half-closing:
 | A complete response, then the connection held open past the client's deadline | client | the client reports `RESPONSE_TIMEOUT` | F6 |
 
 §2 makes a transfer its octets and its end, so the client has no response and
-`OK` is not an outcome it may report. This is the only case that reaches that
-rule, and the answer it forbids is an admission: a client reporting the `OK` it
-parsed returns `PAM_SUCCESS` from `pam_sm_authenticate` (Appendix B) on a
-transfer that never completed.
+`OK` is not an outcome it may report. No rejection reaches that rule, since
+every octet the client holds is well formed, and the answer the case forbids is
+an admission: a client reporting the `OK` it parsed returns `PAM_SUCCESS` from
+`pam_sm_authenticate` (Appendix B) on a transfer that never completed.
 
 One further case observes what a client does after it writes, which §2 requires
 of every client and no status reports. The driver accepts a connection, reads
@@ -1854,7 +1862,7 @@ prohibition: a client MUST NOT report a `REQUEST_` code for any of them.
 | A response `utf8` field above its §3.1 maximum | client | `RESPONSE_MALFORMED` |
 
 These name no field, and a driver chooses one F11 says the client consumes, in a
-response type F11 says it can be made to receive. §5 relieves a client of
+response type F11 says it can receive. §5 relieves a client of
 checking a value it does not use, so a driver that picks otherwise records a
 SHOULD the client never owed.
 
@@ -1882,13 +1890,13 @@ MUST report an enumerated value it does not recognise as that enumeration's 1
 
 A receiver MUST reject a tag whose whole value is not the assignment its field
 number carries. That reaches a number its version assigns, and a number left
-unassigned below the ceiling (§3.3). §3.3 matches a tag whole and
-never by field number, and §4.1 is what makes the rejection safe: no version can
-give such a tag meaning. `0x0242` placed before `0x02C4` in an
-`AUTHENTICATE_REQUEST` drives this against a server, and `0x0142` before
-`0x0181` in an `AUTHENTICATE_RESPONSE` against a client. A receiver fails the
-case if it reads the tag's value into the defined field, and fails it if it
-skips the tag and parses the rest.
+unassigned below the ceiling (§3.3). §3.3 matches a tag whole and never by field
+number, and §4.1 is what makes the rejection safe: no version can give such a
+tag meaning. `0x0242` placed before `0x02C4` in an `AUTHENTICATE_REQUEST` drives
+this against a server, and `0x0142` before `0x0181` in an
+`AUTHENTICATE_RESPONSE` against a client. A receiver fails the case if it reads
+the tag's value into the defined field, and fails it if it skips the tag and
+parses the rest.
 
 **A client reports a fault to its caller.** It has no status to send: a fault it
 found in a response is not a statement about the request it sent, and a request
