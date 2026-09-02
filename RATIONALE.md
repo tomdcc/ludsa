@@ -504,6 +504,27 @@ unsatisfiable where the two sides do not share a user namespace. A bare SHOULD
 is satisfiable everywhere and enforceable nowhere: no conformance case can fail
 a client that simply did not check.
 
+**Why the configured identity is a uid and not a name.** §2 offered both for
+several rounds, and only one of them is a protocol matter. Comparing uids is
+numeric equality against what the kernel reports. Comparing names needs a name
+service, and §2 never said whose: across a container boundary the client's
+`passwd` and the server's differ, so one configured string means two things. The
+tenth round found the normative text offering a form `IMPLEMENTATION.md` tells
+an implementer not to build, in the libpq example whose name comparison is
+called the part not to copy.
+
+The C cost decided it. Resolving a name means `getpwnam_r` inside an `sshd` PAM
+stack, which can `dlopen` further NSS modules and block on a network directory,
+and whose buffer has no derivable size, since `sysconf(_SC_GETPW_R_SIZE_MAX)`
+may return `-1`. A library that allocates nothing has no size to use and no
+bounded retry, and the lookup would sit on the authentication path.
+
+So the protocol compares uids and says nothing else. A deployment that knows its
+server by name resolves the name to a number, and whether the client does that
+itself or makes its host do it is the client's own affair. Removing the
+underspecified resolver beat specifying it, and it costs a deployment one lookup
+at configuration time, where none of the constraints above apply.
+
 Keying the obligation to configuration fixes both. A client nobody configured
 owes nothing, so the rule is satisfiable in every deployment. A client that was
 configured is bound, and a driver can see it: accept the connection, and a

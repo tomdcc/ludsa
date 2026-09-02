@@ -1266,6 +1266,16 @@ Its name comparison is the part not to copy. It resolves the peer uid with
 `pg_fe_getusername` and compares the resulting name, which needs the server's
 user to exist in the client's passwd database.
 
+§2 compares uids and says nothing about names, so `libludsa` takes a uid and
+does no lookup. A host that wants to configure its server by name resolves the
+name and hands the library the number. That is not only a layering preference:
+`getpwnam_r` inside an `sshd` PAM stack can `dlopen` further NSS modules and
+block on a network directory, and its buffer has no derivable size, since
+`sysconf(_SC_GETPW_R_SIZE_MAX)` is permitted to return `-1`. A library that
+allocates nothing has neither a size to use nor a retry loop it can bound, and
+the lookup would sit on the authentication path. A host doing it at
+configuration time has none of those constraints.
+
 It fetches the gid and never uses it, which is right and worth stating. With
 mode `0660` the socket's group is the set of permitted clients, so every
 legitimate client is a member and could set that group on a socket of its own.

@@ -178,14 +178,14 @@ peer whose identity is not the one the client was configured to expect. No
 that was never sent. §3.1's `INVALID_REQUEST` is the other name a client reports
 with no exchange behind it, for input it may not put on the wire at all.
 
-**A client may be configured with the server identity it expects**, as a user
-name or a uid. Where it is, the client MUST confirm the peer's identity before
-it writes. It MUST close the connection where it cannot, without issuing a
-request, and report the condition §7 names `CONNECTION_FAILED`.
+**A client may be configured with the server identity it expects**, as a uid.
+Where it is, the client MUST confirm the peer's identity before it writes. It
+MUST close the connection where it cannot, without issuing a request, and report
+the condition §7 names `CONNECTION_FAILED`.
 
-Not confirming covers a peer that is someone else and a peer the
-client could not identify. A deployment that asks for a check its platform
-cannot perform therefore fails rather than proceeds.
+Not confirming covers a peer that is someone else and a peer the client could
+not identify. A deployment that asks for a check its platform cannot perform
+therefore fails rather than proceeds.
 
 This document names no mechanism, because none works everywhere. Where the two
 sides do not share a user namespace, a peer uid is translated or comes back as
