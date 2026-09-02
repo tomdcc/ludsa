@@ -129,9 +129,27 @@ unconditional: it shuts down its write direction as soon as it has written the
 response, before any drain it owes rather than after. Deferring it until the
 drain finished left a client that had read every declared octet still waiting
 for the end, against a server holding the connection open exactly as §3 tells it
-to, while the same paragraph of §2 promised that a client could read to end of
-file without risk of blocking. Half-closing costs a draining server nothing,
+to. The same paragraph of §2 promised meanwhile that a client could read to end
+of file without risk of blocking. Half-closing costs a draining server nothing,
 since a drain only reads and §2 allows no second response.
+
+**Why a transfer is its octets and its end.** The tenth round asked what a
+client holds when it has parsed a complete response and its own deadline then
+expires on the read that follows. The document had no answer: §7's names covered
+a response that never started and one that stopped part-way, and this one did
+neither. The two available answers were the outcome it parsed and a failure, and
+they reach `PAM_SUCCESS` and `PAM_AUTHINFO_UNAVAIL` on identical wire input.
+
+Both proposed remedies patched the client. The author's ruling went under them:
+a message transfer is its declared octets and the end of the sender's side of
+it, so a receiver holding every octet and no end has not received the transfer
+and holds no outcome to report. There is nothing to adjudicate between, because
+the client never had an answer to weigh against the failure.
+
+That reversed what the client-local codes split on, which the entry on the
+fourth code records. It also made the server's prompt half-close necessary
+rather than tidy: if the end is part of the transfer, a server deferring it
+until a drain finished would be withholding the response itself.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces
@@ -669,8 +687,8 @@ Both reviewers who raised this read it that way.
 
 What the wrong reading cost is not ambiguity alone. Draining a refused
 connection means reading to `2 x MAX_LENGTH` on the path where the server has
-least to spend, and a peer opening connections in bulk is what produces the load
-in the first place, so the reading that owed a drain turned the refusal into the
+least to spend. A peer opening connections in bulk is what produces the load in
+the first place, so the reading that owed a drain turned the refusal into the
 amplifier it exists to prevent.
 
 The rule now sits once, in §3's lead-in, with §2 and §5 pointing at it. Reading
@@ -780,9 +798,11 @@ paragraph first.
 The ninth round added a third grading, and a lead-in above the drain rule naming
 all of them. The same purpose was being stated in three places at three
 strengths, and three statements are three chances to drift. A server that
-rejected a message drains; a server that refused the peer on its credentials
-chooses (§5); a client owes nothing. What the lead-in does not do is restate the
-MUST, which stays in one place below it.
+rejected a message drains. A server that refused the connection owes nothing and
+may read anyway. A client owes nothing. What the lead-in does not do is restate
+the MUST, which stays in one place below it. The tenth round
+widened the middle grading from the credentials refusal alone to any refusal
+reached at accept, which is the entry above.
 
 **Why the count is twice `MAX_LENGTH`.** §4.1 freezes `MAX_LENGTH` within major
 version 1, but a later major version may raise it, and the exchange where that
@@ -1624,12 +1644,15 @@ that are illegal in both directions. They are a client's contract with its
 caller, they are a SHOULD, and a client with better names for its own host is
 still conforming.
 
-The names cover what a client can find, because a response either never
-started, or started and stopped, or arrived and was wrong. `RESPONSE_ABSENT`
-and `RESPONSE_INCOMPLETE` stay separate because their causes differ: nothing
-arriving is usually a refused peer or a wrong socket path, and a truncated
-response is usually a crash. Both map to the same PAM code, so the distinction
-earns its keep in a log rather than at the stack.
+The names cover what a client can find. A response never started, or started
+and stopped, or arrived and was wrong. The tenth round added a fourth shape: it
+arrived whole and never ended, once §2 put the end of the transfer inside it.
+`RESPONSE_ABSENT` and `RESPONSE_INCOMPLETE` stay separate because their causes
+differ: nothing arriving is usually a refused peer or a wrong socket path, and a
+truncated response is usually a crash. Both map to the same PAM code, so the
+distinction earns its keep in a log rather than at the stack. What separates
+either of them from `RESPONSE_TIMEOUT` is not how much arrived but what ended
+the wait, which is the entry above.
 
 **Why `REQUEST_MALFORMED` is narrow.** It maps to a PAM code that tells an
 operator to file a bug, so anything reported through it had better be a bug.
@@ -1815,12 +1838,20 @@ refused peer change the answer, and a version word read to choose an encoding
 changes nothing. The status is `PEERCRED_DENIED` whatever arrives, whatever
 version it names, and whether or not anything arrives at all.
 
-That displacement is why neither `VERSION_UNSUPPORTED` nor `REQUEST_TIMEOUT`
-surfaces here. Both describe something the peer did after the refusal was
-settled, and reporting either sends an operator to the wrong configuration file.
-A peer that is refused and also speaks an unimplemented version is misconfigured
-twice; the refusal is the one worth reporting, because it is the one that would
-still refuse if the version were fixed.
+That displacement is why nothing else surfaces here. `VERSION_UNSUPPORTED` and
+`REQUEST_TIMEOUT` describe something the peer did after the refusal was settled,
+and reporting either sends an operator to the wrong configuration file. A peer
+that is refused and also speaks an unimplemented version is misconfigured twice;
+the refusal is the one worth reporting, because it is the one that would still
+refuse if the version were fixed.
+
+The tenth round added the `RATE_LIMITED` a server gives at its concurrency
+bound, which is reached alongside this check and which the entry had not
+considered. It falls the same way and for a sharper reason: `RATE_LIMITED` tells
+a peer a later attempt may fare better, which is never true of a refusal on
+identity, and it sends an operator to capacity when the fault is permissions. §5
+now says nothing displaces the refusal rather than naming the answers that do
+not, which is the same move made on §2's list of when a server may say nothing.
 
 A drain is a separate question and the answer falls out. §3's drain binds a
 server that rejected a message, and this refusal precedes any message, so none
@@ -2497,11 +2528,11 @@ driver to discover it.
 is the one whose violation kills an `sshd`, and the tenth round found its only
 case unable to exercise it. The case had the driver read part of the request and
 close while the client was still writing, and no request this protocol permits
-is large enough for that: Appendix A's largest sits an order of magnitude inside
+is large enough for that. Appendix A's largest sits an order of magnitude inside
 a default socket send buffer, so the client returns from its write before the
-driver has read anything, then reports `RESPONSE_ABSENT` exactly as it would for
-an ordinary silent server. Both reviewers reached that independently, and both
-proposed conceding it.
+driver has read anything. It then reports `RESPONSE_ABSENT` exactly as it would
+for an ordinary silent server. Both reviewers reached that independently, and
+both proposed conceding it.
 
 F10 is the author's answer instead, and it inverts where the difficulty sits. A
 driver cannot make a conforming client write in pieces, but the client can offer
@@ -2628,6 +2659,17 @@ marked `either` while testing nothing on that side. Now the two orderings give
 two different names, and the case earns its marking. The expected answer flipped
 afterwards, when the repeat check moved behind `msg_type`, but the case still
 turns on which of the two a receiver reaches first.
+
+**Why a third selector case pins the order.** §4 says the order between steps 8
+and 9 is not observable, because both yield the same status, and a receiver
+taking them the other way round conforms. Steps 11 and 12 are not like that. A
+`service` the server does not recognise answers in a `STATUS_RESPONSE`, and a
+`max_age` its limit forbids answers `RATE_LIMITED` in an `ERROR`, so the two
+outcomes differ in message type as well as in code. An order §4 states and no
+case drives is an order two implementations can take differently while both
+believe they conform. The tenth round found no case driving this one. The case
+supplies both conditions in one request, which is the shape the numbered table
+already uses to pin steps against each other.
 
 **Why the decision cases name a recognised `service`.** They expected a `result`
 that was not `OK`, which was exact until `SERVICE_UNSUPPORTED` became a `result`
