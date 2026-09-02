@@ -234,8 +234,11 @@ side can learn it from the other.
 
 A server MUST refuse to start if the configured path exists
 and is not a socket, and MUST apply that test before it removes or replaces
-whatever is there. A stale socket MUST be gone from that path before the server
-publishes its own, whether the server unlinks it or replaces it atomically.
+whatever is there. Any socket already at that path MUST be gone before the
+server publishes its own, whether the server unlinks it or replaces it
+atomically. This document requires no test of whether anything is listening on
+it: a unix socket outlives the process that bound it, so a path holding one says
+nothing about whether a server is running.
 
 ### 2.1 Independence of the two sides
 
@@ -927,9 +930,13 @@ A server whose check fails does one of three things:
 
 The third reads a version to choose an encoding and for nothing else. A version
 this server does not implement, and an interval that expires with none read, are
-both answered `PEERCRED_DENIED` in the server's own major version. Neither
-`VERSION_UNSUPPORTED` nor `REQUEST_TIMEOUT` displaces it, because the refusal
-was settled before either could arise and nothing the peer sends can change it.
+both answered `PEERCRED_DENIED` in the server's own major version. Nothing
+displaces it: not `VERSION_UNSUPPORTED`, not `REQUEST_TIMEOUT`, and not the
+`RATE_LIMITED` §2 gives a server at its concurrency bound, which is reached at
+accept alongside this check. The refusal was settled before any of them could
+arise, nothing the peer sends can change it, and `RATE_LIMITED` would tell a
+peer that a later attempt may fare better, which is never true of a refusal on
+identity.
 
 Such a server owes no drain and MAY read and discard, on §3's terms. It parses
 nothing beyond `ludsa_version_major`, and holds no length it may rely on, so
@@ -1607,6 +1614,13 @@ carries:
 |---|---|---|---|
 | An AUTHENTICATE request naming a `service` the server does not recognise | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
 | A STATUS request naming a `service` the server does not recognise | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
+| A STATUS request naming a `service` the server does not recognise, whose `max_age` its own limit also forbids | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1, F2 |
+
+The third pins §4's step 11 before step 12. §4 says the order between steps 8
+and 9 is not observable because both yield the same status; this pair is not
+like that, since the selector answers in a `STATUS_RESPONSE` and the limit
+answers `RATE_LIMITED` in an `ERROR`, so a receiver taking them the other way
+round is visible on the wire.
 
 One further case observes what a server does after it has answered, which no
 status can show. The driver writes an 8-octet envelope declaring a

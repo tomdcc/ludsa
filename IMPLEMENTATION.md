@@ -474,10 +474,12 @@ a socket it has just created correctly.
 
 ## Detecting a stale socket
 
-§2 requires a stale socket to be gone from the published path before the server
-publishes its own, and requires the is-a-socket test before anything at that
-path is removed or replaced. It does not say how to tell stale from live,
-because that is a detection strategy rather than an observable property.
+§2 requires any socket already at the published path to be gone before the
+server publishes its own, and requires the is-a-socket test before anything at
+that path is removed or replaced. It requires no liveness test, so staleness is
+not a property you have to establish for conformance: whatever socket is there
+goes. The strategies below are about what a deployment wants to notice when a
+second instance starts by mistake.
 
 **`rename()` does not perform that test for you.** Measured on Linux on
 2026-08-23: renaming a socket over a regular file succeeds silently and frees

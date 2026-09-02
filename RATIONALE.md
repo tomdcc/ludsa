@@ -323,18 +323,25 @@ fallback for a server that cannot set the group is to open the mode until things
 work. That trades a startup failure nobody can miss for a socket anyone on the
 box can authenticate through, and nothing would ever surface it.
 
-**Why a stale socket must be cleared, and why only a socket.** The inode
+**Why a socket at the path must be cleared, and why only a socket.** The inode
 survives a crash, and `bind()` would otherwise fail with `EADDRINUSE`.
 Unqualified, though, that rule deletes whatever is at the configured path. Point
 it at a regular file by mistake and the server removes it at startup. Refusing
 to start turns a destructive misconfiguration into a loud one.
 
 The rule states a property rather than a mechanism, because the two publishing
-routes reach it differently. One unlinks the stale socket and binds in place;
-the other binds to a temporary name and renames over it, which frees the
+routes reach it differently. One unlinks the socket already there and binds in
+place; the other binds to a temporary name and renames over it, which frees the
 replaced inode just as an unlink would. An earlier draft required the unlink,
 which the second route does not perform, so a recommended implementation
 violated a MUST on a literal reading.
+
+The word "stale" was doing work the rule never asked for. It reads as a property
+a server has to establish, and a unix socket outlives the process that bound it,
+so nothing about a path holding one says whether a server is running. The tenth
+round replaced it: any socket already at the path goes, and no liveness test is
+required. What a deployment does to notice a second instance started by mistake
+is `IMPLEMENTATION.md`'s business, not a conformance question.
 
 **Why there is no rule about the socket's directory.** A user who can write to
 the directory can unlink the socket and bind their own at the same path. The
