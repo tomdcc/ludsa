@@ -1024,6 +1024,16 @@ then gave the escape hatch to the client alone. §5 gave the server one instance
 for `error_detail`. That works because a server composes the value and can embed
 less of it. `authn_id` has no such route: the identity is the value.
 
+The eleventh round gave the rule a case, since every other new MUST of the last
+two rounds had one or a note saying why not, and this one is driveable: F3
+supplies, where a backend can, a credential whose identity is longer than the
+maximum, and the case expects `INTERNAL_ERROR`. A truncating server and an
+omitting server each answer `OK`, in shapes the driver can tell apart. Most
+backends will take the concession, since a Kubernetes service-account identity
+cannot reach the maximum, and a flat-file server is the likely one to run it.
+The alternative, a note that nothing a driver sends reaches the rule, would have
+been false.
+
 The tenth round first proposed letting the server omit the field, on the ground
 that every field a server sends is optional in its schema. The author overruled
 it, and the distinction is the one that matters here. Optional in the schema

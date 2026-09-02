@@ -1554,7 +1554,11 @@ document does not specify. A driver MUST be given all of them:
   trailing newline to that credential makes it invalid to the peer's backend,
   which is what the credential case below appends. A backend that accepts the
   modified value cannot run that case and is not non-conforming for that
-  either.
+  either. Where the backend can supply one, it also gives a credential whose
+  resolved identity is longer than `authn_id`'s §3.1 maximum, for a server
+  configured to supply `authn_id`. A backend that cannot supply such an
+  identity cannot run the over-long identity case and is not non-conforming
+  for that.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
@@ -1789,6 +1793,23 @@ No wire-level input reaches this rule. The octets are well formed either way,
 and what differs is what the server did with them before it decided, which is
 why F3 has to say whether the appended octet makes the credential invalid to the
 peer's backend.
+
+One further case observes a server holding a value it cannot carry, which §3.1
+binds and no wire-level input reaches. The driver sends a credential whose
+resolved identity is longer than `authn_id`'s maximum, under a `service` the
+server recognises, to a server configured to supply `authn_id`:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A credential whose resolved identity is longer than `authn_id`'s §3.1 maximum, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
+
+A server that truncates the identity answers an `AUTHENTICATE_RESPONSE` carrying
+an `authn_id` at exactly its maximum, and fails. One that omits the field
+answers a response carrying none, and fails too, since §3.1 keeps omission for a
+server with no value to send. The identity is the value, so unlike
+`error_detail` there is nothing to embed less of, and the request was well
+formed throughout: what the case observes is what the server did with a value of
+its own.
 
 One further case observes a client whose peer closes while it is still writing,
 which §2.1 requires it to survive and §2 permits the server to do. Where F10
