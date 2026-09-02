@@ -2549,10 +2549,16 @@ doing so would mean marking every row that reads an outcome from a client, and a
 later case added of that kind would silently be marked wrong.
 
 The ninth round narrowed the kind. F7 used to claim every case driven against a
-client, which two do not need: one asserts that the driver reads end of file and
-that its response is accepted for writing, and one asserts that a field on the
-wire carries its octets unchanged. Both are assertions about the socket, so
-neither reads the client's own names or the channel they arrive on.
+client, and a case whose assertions are all on the socket does not need it: one
+asserts that the driver reads end of file and that its response is accepted for
+writing, another that a field on the wire carries its octets unchanged. Neither
+reads the client's own names or the channel they arrive on.
+
+That ruling reached F7's own entry and this passage and not the sentence in §7
+that generalises it, which went on claiming every case driven against a client
+for a round. The tenth round found the two halves of one ruling disagreeing,
+which is the shape this document keeps producing when a change lands in more
+places than the person making it visited.
 
 **Why the client's line sits at one octet and the server's at two.** The two
 thresholds answer different questions. A server needs `ludsa_version_major`

@@ -1447,8 +1447,9 @@ cases exist in one direction only. Case 21 is marked `server` on other grounds.
 It can be constructed against a client, but §5 makes a client's outcome there a
 SHOULD, so the table of SHOULD-report cases below carries that direction.
 *Needs* names a fixture this document does not define. F7 is a precondition of
-every case driven against a client rather than of any one case, so the column
-does not repeat it.
+every case that reads an outcome from the client under test, rather than of any
+one case, so the column does not repeat it. A case whose assertions are all on
+the wire does not need it.
 
 Every case driven against a server is answerable, because each carries at least
 a version word and a server can answer in its own major version (§2). A case
