@@ -1947,6 +1947,17 @@ it is still the connecting peer being refused. A request too malformed to yield
 a `service` never lets it decide, so the framing status is the only answer it
 has.
 
+The eleventh round ordered the two answers that meet at step 11. A `service` the
+server does not hold is `SERVICE_UNSUPPORTED` whoever asks, because the gate
+guards what stands behind a name and an unheld name has nothing behind it. The
+other order surfaced a client's misconfigured `service` as a peer refusal, which
+sends the operator to the wrong file, and the two map to different PAM codes.
+What a refused peer learns from it, that a name is unheld, is small beside what
+`PEERCRED_DENIED` already tells it. No case drives the order, for the reason no
+case drives `PEERCRED_DENIED` at all: the check is one this document does not
+require, and a fixture for it would describe a server's policy rather than the
+protocol.
+
 An earlier draft justified a later check by saying it lets a server compare the
 process id the kernel attests against the one the request claims. That is wrong
 as a reason to delay. The kernel's credentials are readable at accept and can be

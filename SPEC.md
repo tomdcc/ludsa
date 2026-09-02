@@ -953,8 +953,11 @@ A server whose rules also govern which peers may reach which `service` values
 has a second gate. It cannot close that one before it has read a `service`. Its
 credentials check still happens at accept. What waits is which services this
 peer may reach, a question §4's step 11 settles and `PEERCRED_DENIED` also
-answers. A request too malformed to yield a `service`
-never lets it decide, so the framing status is the only answer it has.
+answers. The gate concerns services the server holds: a `service` it does not
+hold draws `SERVICE_UNSUPPORTED` (§6.2.1) whoever the peer is, since there is
+nothing behind the name for the gate to guard. A request too malformed to yield
+a `service` never lets it decide, so the framing status is the only answer it
+has.
 
 It discloses that the peer was refused and why. That is a smaller disclosure
 than it looks, because a uid is not freely chosen: an attacker must already be

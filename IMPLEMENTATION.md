@@ -1224,9 +1224,12 @@ that sheds load by draining has built the amplifier it was shedding to avoid.
 
 **A peer rule that turns on `service` is a second gate, not a later check.** The
 credentials check still runs at accept. What waits is which services this peer
-may reach, and `PEERCRED_DENIED` answers that too. Such a server meeting a
-request too malformed to yield a `service` cannot settle the second gate at all,
-and answers the framing status instead.
+may reach, and `PEERCRED_DENIED` answers that too. Look the name up before the
+peer table: an unheld `service` is `SERVICE_UNSUPPORTED` for every peer (§5), so
+a deny-by-default allowlist keyed on names answers the selector first and gates
+only the names the server holds. Such a server meeting a request too malformed
+to yield a `service` cannot settle the second gate at all, and answers the
+framing status instead.
 
 **Do not defer the credentials check to compare process ids.** Reading
 `SO_PEERCRED` at accept and keeping it costs nothing, so the uid check runs
