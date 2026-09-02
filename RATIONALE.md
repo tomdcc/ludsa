@@ -150,29 +150,30 @@ had received nothing and had no outcome to weigh against the failure. The
 eleventh round reversed it, for two reasons found separately. All three of its
 reviewers read the rule as binding a server to wait for the client's half-close
 before it had received the request, which §4's order, §7 and the guidance all
-contradicted, so a client that never half-closed drew `OK` from one conforming
+contradicted. A client that never half-closed drew `OK` from one conforming
 server and `REQUEST_TIMEOUT` from another. And a measurement showed that Linux
-reports a peer's close as `ECONNRESET` rather than end of file wherever the
-closer held unread octets, which every refusal reached at accept and every
-bounded drain produces, so a client reading for the end met an error on the
-paths §5 permits and could not tell it from a connection that was actually
-reset.  The author's ruling was to drop the end from delivery rather than to
-scope it to one side or to name the platform behaviour. The tenth round's
-argument was wrong on its own terms: the end proves nothing the declared length
-had not already proved, since a sender that declared a length has nothing more
-it could have meant to send. What the client in the tenth round's question had
-done was block on an exhaustive excess-octet read, and the answer to that is not
-to block. A message is delivered at its declared octets on both sides, nothing
-that happens afterwards changes what was delivered, and a deadline expiring
-after delivery cannot take a message away. The transport supports it: `AF_UNIX`
-never discards queued data on close, which the same measurement confirmed on
-both platforms.  The client-local codes went back to splitting on how much
-arrived, which the entry on the fourth code records, and the round-ten case that
-expected `RESPONSE_TIMEOUT` for a complete response held open inverted rather
-than died: it now expects the `result`, and fails a client that waits for the
-end. The platform behaviour went to the guidance, where it belongs, and the one
-normative trace of it is that `RESPONSE_INCOMPLETE` and §3's drain terminator
-name an error alongside end of file.
+reports a peer's close as `ECONNRESET` wherever the closer held unread octets,
+which every refusal reached at accept and every bounded drain produces. A client
+reading for the end therefore met an error on the paths §5 permits, and could
+not tell it from a connection that was actually reset. The author's ruling was
+to drop the end from delivery. Scoping it to one side and naming the platform
+behaviour were the two remedies on the table, and the ruling went under both.
+The tenth round's argument was wrong on its own terms: the end proves nothing
+the declared length had not already proved, since a sender that declared a
+length has nothing more it could have meant to send. What the client in the
+tenth round's question had done was block on an exhaustive excess-octet read,
+and the answer to that is not to block. A message is delivered at its declared
+octets on both sides, nothing that happens afterwards changes what was
+delivered, and a deadline expiring after delivery cannot take a message away.
+The transport supports it: `AF_UNIX` never discards queued data on close, which
+the same measurement confirmed on both platforms.  The client-local codes went
+back to splitting on how much arrived, which the entry on the fourth code
+records, and the round-ten case that expected `RESPONSE_TIMEOUT` for a complete
+response held open inverted rather than died: it now expects the `result`, and
+fails a client that waits for the end. The platform behaviour went to the
+guidance, where it belongs, and the one normative trace of it is that
+`RESPONSE_INCOMPLETE` and §3's drain terminator name an error alongside end of
+file.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces
@@ -465,18 +466,18 @@ elsewhere in this document, arriving at a MUST instead of at a number: a closed
 list is a claim about every case, and this one had already been outgrown twice
 before anyone noticed it was a claim at all.
 
-The eleventh round found that the honest statement had gone a step too far.
-"What binds a server is the other end of it" read, to both reviewers
+The eleventh round found that the tenth round's statement had gone a step too
+far. "What binds a server is the other end of it" read, to both reviewers
 independently, as making the answer itself optional after the version word,
 against §6's MUST, §6.3 and §7, so a server that read a full request and dropped
 it under load conformed under one section and not under three. The two examples
 the tenth round gave of judgement, a caller already ruled out and a load-shedder
 declining to wait for a version word, both sit at accept, and §3 had already
 named that property for the drain. So the MUST is back with its exceptions
-stated as a kind of case rather than a list: a refusal reached at accept may say
-nothing, and a server that began writing finishes unless writing fails. A third
-refusal reached at accept would fall under it without anyone editing §2, which
-is what separates a property from the list that went.
+stated as a kind of case: a refusal reached at accept may say nothing, and a
+server that began writing finishes unless writing fails. A third refusal reached
+at accept would fall under it without anyone editing §2, which is what separates
+a property from the list that went.
 
 **Why the request deadline needed qualifying.** The unqualified sentence told a
 server to answer `REQUEST_TIMEOUT` whenever the deadline expired, including
@@ -497,13 +498,13 @@ against.
 The eleventh round settled what the refusal answers when the wait turns up
 something else. It is settled at accept on the same terms as §5's peer refusal:
 a version the server does not implement, read while it waits, is `RATE_LIMITED`
-in the server's own major version rather than `VERSION_UNSUPPORTED`, and an
-expiry while it waits is `RATE_LIMITED` in its own major version or a close.
-Before that, §4 and §2 gave a server at its bound two answers for a future-major
-client, and they map to different PAM codes. The trade is the one §5 already
-made: the client loses the version diagnosis on the exchanges a loaded server
-refuses, and gains the answer that tells it a later attempt may fare better,
-which is the one true thing the server knows.
+in the server's own major version, which `VERSION_UNSUPPORTED` does not
+displace, and an expiry while it waits is `RATE_LIMITED` in its own major
+version or a close. Before that, §4 and §2 gave a server at its bound two
+answers for a future-major client, and they map to different PAM codes. The
+trade is the one §5 already made: the client loses the version diagnosis on the
+exchanges a loaded server refuses, and gains the answer that tells it a later
+attempt may fare better, which is the one true thing the server knows.
 
 **Why a client has a name for a request it cannot send.** §3.1 forbids a sender
 emitting a field above its maximum and forbids anyone truncating one to fit, and
@@ -572,7 +573,7 @@ only a wait that ended short of the declared octets: a client holding them holds
 the response and none of the three applies. Within that, how much arrived
 separates the two the server ended, nothing at all and part of a response, and
 the client's own deadline names the third whatever had arrived, because the
-client is still waiting rather than holding a fault the server committed.
+client is still waiting and holds no fault the server committed.
 
 All of them map to `PAM_AUTHINFO_UNAVAIL`, so the splits earn their keep in a
 log rather than at the stack, which is the trade `RESPONSE_ABSENT` and
@@ -1024,8 +1025,8 @@ then gave the escape hatch to the client alone. §5 gave the server one instance
 for `error_detail`. That works because a server composes the value and can embed
 less of it. `authn_id` has no such route: the identity is the value.
 
-The eleventh round gave the rule a case, since every other new MUST of the last
-two rounds had one or a note saying why not, and this one is driveable: F3
+The eleventh round gave the rule a case. Every other new MUST of the last two
+rounds had one, or a note saying why not, and this one is driveable. F3
 supplies, where a backend can, a credential whose identity is longer than the
 maximum, and the case expects `INTERNAL_ERROR`. A truncating server and an
 omitting server each answer `OK`, in shapes the driver can tell apart. Most
@@ -1604,8 +1605,8 @@ promise depends on.
 **Why the freeze is one line about tags.** A tag's number, type, width and
 required status all live in its value, so forbidding each separately would be
 four ways of saying the same thing. Widening a field or making an optional field
-required produces a different tag, which is the addition of a field beside one
-that stays rather than a change to be forbidden.
+required produces a different tag, which adds a field beside one that stays and
+forbids nothing.
 
 **Why field number 0 is reserved.** The ordering check compares each tag against
 the one before it, with zero as the value before the first. §3.3's shape checks
@@ -1642,12 +1643,12 @@ The eleventh round found that retirement could not survive the ceiling. §4.1 le
 a later minor version remove a field and retire its number, and the ceiling rule
 treats an unassigned number below the ceiling as proof the sender is broken, so
 a peer at the version that assigned a field, sending it to a peer at the version
-that retired it, was rejected for conforming. The fix removes the operation
-rather than carving it out: a number once assigned stays assigned in every later
-minor version, a later version may deprecate a field but keeps accepting it, and
-there is nothing to retire. A retired-number list would have been a second
-concept doing what an assigned field the receiver ignores already does, carried
-by every receiver forever.
+that retired it, was rejected for conforming. The fix removes the operation: a
+number once assigned stays assigned in every later minor version, a later
+version may deprecate a field but keeps accepting it, and there is nothing to
+retire. Carving retirement out of the ceiling would have needed a retired-number
+list, a second concept doing what an assigned field the receiver ignores already
+does, carried by every receiver forever.
 
 **Why a required field forces a major bump.** Every older peer rejects a message
 carrying a required tag it does not recognise. Such a field is a new major
@@ -1965,8 +1966,8 @@ sends the operator to the wrong file, and the two map to different PAM codes.
 What a refused peer learns from it, that a name is unheld, is small beside what
 `PEERCRED_DENIED` already tells it. No case drives the order, for the reason no
 case drives `PEERCRED_DENIED` at all: the check is one this document does not
-require, and a fixture for it would describe a server's policy rather than the
-protocol.
+require, and a fixture for it would describe a server's policy and nothing in
+the protocol.
 
 An earlier draft justified a later check by saying it lets a server compare the
 process id the kernel attests against the one the request claims. That is wrong
@@ -2689,8 +2690,8 @@ four ways across platforms, on the same ground as §2's own rule.
 
 A platform may refuse to bind at the array's full size at all, which the
 guidance measured on macOS. A truncating client cannot connect at that length
-there either, so the assertion holds with no socket bound, and the case says so
-rather than asking a driver to do what its platform forbids.
+there either, so the assertion holds with no socket bound, and the case says so,
+since a driver cannot be asked to do what its platform forbids.
 
 The report ends the case rather than a deadline. A driver waiting to prove a
 negative would have to decide how long a connection that is never coming takes

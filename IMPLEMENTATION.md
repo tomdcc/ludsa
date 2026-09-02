@@ -352,7 +352,7 @@ the retry §2 forbids; that rule is about opening a new connection. A client tha
 treats either as fatal fails an authentication because an unrelated child
 exited. An `EINTR` from `connect()` is the other way round. POSIX has the
 connection go on being established on that descriptor. So the retry §2 permits
-closes the interrupted descriptor and connects a fresh one, rather than calling
+closes the interrupted descriptor and connects a fresh one, and never calls
 `connect()` on it again.
 
 **Read the response even when the write failed.** §3 has a server that rejects a
@@ -399,9 +399,9 @@ afterwards changes nothing: report the `result` you parsed, never
 Excess-octet detection on a client is the same best-effort check as the
 server's, a buffered-data test or a non-blocking read, and never a blocking
 read: the server may still be draining, and on Linux its eventual close arrives
-as `ECONNRESET` rather than end of file wherever it left octets unread. A client
-that requires end of file fails a conforming refusal on that platform and passes
-it on macOS, which is the divergence a developer on this machine never sees.
+as `ECONNRESET` wherever it left octets unread. A client that requires end of
+file fails a conforming refusal on that platform and passes it on macOS, which
+is the divergence a developer on this machine never sees.
 
 ## Creating and publishing the socket
 

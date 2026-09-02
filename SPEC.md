@@ -65,8 +65,8 @@ The server MUST observe both of these:
 - **The read deadline still applies.** A request is delivered at its declared
   octets (below), so a server holding them does not need the half-close. One
   that reads on, to observe what this section says about octets beyond the
-  declared length, MUST fall back to the deadline rather than wait indefinitely
-  for a half-close the client omitted.
+  declared length, MUST fall back to the deadline when the half-close the
+  client owed does not arrive.
 
 **A server answers once it can.** The obligation begins when it has read
 `ludsa_version_major`. That value opens every message, and until the server
@@ -88,11 +88,11 @@ client's; this is the same move where it has not been given one.
 
 Having read it, a server MUST send a response, whatever the request turns out to
 be, and replies in its own major version where it does not implement the
-client's. The exceptions are a property rather than a list. A refusal reached at
-accept (§3) asked nothing of the peer, so a server that refused there MAY close
-without replying, whether or not it read the version word on the way: §5's peer
-refusal is one, and a server at its concurrency bound (below) is another. And
-having begun writing a response, a server finishes it unless writing fails, its
+client's. The exceptions share a property. A refusal reached at accept (§3)
+asked nothing of the peer, so a server that refused there MAY close without
+replying, whether or not it read the version word on the way: §5's peer refusal
+is one, and a server at its concurrency bound (below) is another. And having
+begun writing a response, a server finishes it unless writing fails, its
 response deadline expiring included, or a fault leaves it unable to.
 
 A client cannot separate a server that closed on a refusal from one that failed.
@@ -158,8 +158,8 @@ The server SHOULD bound concurrent connections. At its limit it MAY respond
 kernel backlog. The limit is reached at accept, before any octet has arrived, so
 a server that chooses to answer reads `ludsa_version_major` first, or answers in
 its own major version without waiting for one. The refusal is settled at accept
-on §5's terms: a version it does not implement, read while it waits, is answered
-`RATE_LIMITED` in its own major version, and an expiry while it waits, of the
+on §5's terms. A version it does not implement, read while it waits, is answered
+`RATE_LIMITED` in its own major version. An expiry while it waits, of the
 request deadline or of a bound of its own (above), is `RATE_LIMITED` in its own
 major version or a close. §3 has a refusal reached at accept owe no drain,
 whatever the server read while waiting.
@@ -1315,8 +1315,8 @@ It carries a second precondition for the same reason. A server MUST NOT answer
 resolved no identity from the credential. Those are what
 `AUTHN_DENIED_USER_UNKNOWN` names. A `user` resolves where the server holds the
 name, whatever its policy says about who may act as it. So the line is whether
-the name resolves, not whether any mapping reaches it and not which order a
-server did its work in. A name that resolves and is then refused is
+the name resolves. Neither whether any mapping reaches it nor the order a server
+did its work in moves it. A name that resolves and is then refused is
 `AUTHN_DENIED_POLICY`, and a name that does not resolve is
 `AUTHN_DENIED_USER_UNKNOWN` whether or not the credential was examined first.
 
@@ -1708,8 +1708,8 @@ connection and writes nothing:
 |---|---|---|---|
 | A connection accepted by a peer whose identity is not the one the client was configured to expect | client | the client writes no octet and reports `CONNECTION_FAILED` | F5 |
 
-This case turns on which uid is at the far end of the socket rather than on the
-octets crossing it, which is why a driver needs a second uid for it.
+This case turns on which uid is at the far end of the socket, which is why a
+driver needs a second uid for it.
 
 One further case observes a client that never connects at all, which §3.1's
 prohibition reaches and no message can. The driver listens, and hands the client
