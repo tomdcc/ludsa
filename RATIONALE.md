@@ -127,29 +127,52 @@ into an immediate error.
 The server's side is stated separately, and the tenth round made it
 unconditional: it shuts down its write direction as soon as it has written the
 response, before any drain it owes rather than after. Deferring it until the
-drain finished left a client that had read every declared octet still waiting
-for the end, against a server holding the connection open exactly as §3 tells it
-to. The same paragraph of §2 promised meanwhile that a client could read to end
-of file without risk of blocking. Half-closing costs a draining server nothing,
-since a drain only reads and §2 allows no second response.
+drain finished left a client that had chosen to read for the end waiting on a
+server holding the connection open exactly as §3 tells it to, while the same
+paragraph of §2 promised that a client could read to end of file without risk of
+blocking. Half-closing costs a draining server nothing, since a drain only reads
+and §2 allows no second response. The eleventh round then took the end out of
+delivery altogether, which is the next entry, so nothing depends on the ordering
+any more. The rule stays because it costs nothing, §7 observes it, and it keeps
+that promise true for a client that reads on anyway.
 
-**Why a transfer is its octets and its end.** The tenth round asked what a
-client holds when it has parsed a complete response and its own deadline then
-expires on the read that follows. The document had no answer: §7's names covered
-a response that never started and one that stopped part-way, and this one did
-neither. The two available answers were the outcome it parsed and a failure, and
-they reach `PAM_SUCCESS` and `PAM_AUTHINFO_UNAVAIL` on identical wire input.
+**Why a message is delivered at its declared octets, and the end is not part of
+it.** The tenth round asked what a client holds when it has parsed a complete
+response and its own deadline then expires on the read that follows. The
+document had no answer: §7's names covered a response that never started and one
+that stopped part-way, and this one did neither. The two available answers were
+the outcome it parsed and a failure, and they reach `PAM_SUCCESS` and
+`PAM_AUTHINFO_UNAVAIL` on identical wire input.
 
-Both proposed remedies patched the client. The author's ruling went under them:
-a message transfer is its declared octets and the end of the sender's side of
-it, so a receiver holding every octet and no end has not received the transfer
-and holds no outcome to report. There is nothing to adjudicate between, because
-the client never had an answer to weigh against the failure.
-
-That reversed what the client-local codes split on, which the entry on the
-fourth code records. It also made the server's prompt half-close necessary
-rather than tidy: if the end is part of the transfer, a server deferring it
-until a drain finished would be withholding the response itself.
+The tenth round's ruling was that a transfer is its declared octets and the end
+of the sender's side of it, so that a receiver holding every octet and no end
+had received nothing and had no outcome to weigh against the failure. The
+eleventh round reversed it, for two reasons found separately. All three of its
+reviewers read the rule as binding a server to wait for the client's half-close
+before it had received the request, which §4's order, §7 and the guidance all
+contradicted, so a client that never half-closed drew `OK` from one conforming
+server and `REQUEST_TIMEOUT` from another. And a measurement showed that Linux
+reports a peer's close as `ECONNRESET` rather than end of file wherever the
+closer held unread octets, which every refusal reached at accept and every
+bounded drain produces, so a client reading for the end met an error on the
+paths §5 permits and could not tell it from a connection that was actually
+reset.  The author's ruling was to drop the end from delivery rather than to
+scope it to one side or to name the platform behaviour. The tenth round's
+argument was wrong on its own terms: the end proves nothing the declared length
+had not already proved, since a sender that declared a length has nothing more
+it could have meant to send. What the client in the tenth round's question had
+done was block on an exhaustive excess-octet read, and the answer to that is not
+to block. A message is delivered at its declared octets on both sides, nothing
+that happens afterwards changes what was delivered, and a deadline expiring
+after delivery cannot take a message away. The transport supports it: `AF_UNIX`
+never discards queued data on close, which the same measurement confirmed on
+both platforms.  The client-local codes went back to splitting on how much
+arrived, which the entry on the fourth code records, and the round-ten case that
+expected `RESPONSE_TIMEOUT` for a complete response held open inverted rather
+than died: it now expects the `result`, and fails a client that waits for the
+end. The platform behaviour went to the guidance, where it belongs, and the one
+normative trace of it is that `RESPONSE_INCOMPLETE` and §3's drain terminator
+name an error alongside end of file.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces
@@ -507,15 +530,15 @@ it, and `UNAVAILABLE` lost its client clause when the response codes were split
 out. What was left was which client code covers it, and the three that existed
 then were all defined by end of file, which a deadline expiry is not.
 
-A fourth code keeps a distinction worth keeping, and the tenth round changed
-which one. The codes split on what arrived before they split on what ended it,
-and that ordering is now reversed. §2 makes a transfer its octets and its end,
-so a client holding every declared octet and no end has not received a response
-and has no outcome to report. What ended the wait is therefore the whole
-question, and how much arrived separates only the two the server ended: nothing
-at all, and part of a response. A server that hung after writing part of one is
-a timeout rather than an incomplete response, because the client is still
-waiting rather than holding a fault the server committed.
+A fourth code keeps a distinction worth keeping. The tenth round made a transfer
+include its end, so that what ended the wait became the whole question and how
+much arrived separated only the two the server ended. The eleventh round took
+the end out of delivery again, which §2's entry records, and the codes reach
+only a wait that ended short of the declared octets: a client holding them holds
+the response and none of the three applies. Within that, how much arrived
+separates the two the server ended, nothing at all and part of a response, and
+the client's own deadline names the third whatever had arrived, because the
+client is still waiting rather than holding a fault the server committed.
 
 All of them map to `PAM_AUTHINFO_UNAVAIL`, so the splits earn their keep in a
 log rather than at the stack, which is the trade `RESPONSE_ABSENT` and
@@ -1653,15 +1676,15 @@ that are illegal in both directions. They are a client's contract with its
 caller, they are a SHOULD, and a client with better names for its own host is
 still conforming.
 
-The names cover what a client can find. A response never started, or started
-and stopped, or arrived and was wrong. The tenth round added a fourth shape: it
-arrived whole and never ended, once §2 put the end of the transfer inside it.
-`RESPONSE_ABSENT` and `RESPONSE_INCOMPLETE` stay separate because their causes
-differ: nothing arriving is usually a refused peer or a wrong socket path, and a
-truncated response is usually a crash. Both map to the same PAM code, so the
-distinction earns its keep in a log rather than at the stack. What separates
-either of them from `RESPONSE_TIMEOUT` is not how much arrived but what ended
-the wait, which is the entry above.
+The names cover what a client can find. A response never started, or started and
+stopped, or arrived and was wrong. The tenth round added a fourth shape, arrived
+whole and never ended, and the eleventh removed it again when §2 stopped making
+the end part of the message. `RESPONSE_ABSENT` and `RESPONSE_INCOMPLETE` stay
+separate because their causes differ: nothing arriving is usually a refused peer
+or a wrong socket path, and a truncated response is usually a crash. Both map to
+the same PAM code, so the distinction earns its keep in a log rather than at the
+stack. What separates either of them from `RESPONSE_TIMEOUT` is what ended the
+wait, which is the entry above.
 
 **Why `REQUEST_MALFORMED` is narrow.** It maps to a PAM code that tells an
 operator to file a bug, so anything reported through it had better be a bug.

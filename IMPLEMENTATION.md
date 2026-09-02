@@ -269,8 +269,13 @@ at least as long, which is the direction this section's purpose points.
 **What the drain is for.** It keeps a client that is still writing a large
 `credential` from taking `EPIPE` before it gets round to reading. On `AF_UNIX` a
 response already written sits in the peer's receive queue and survives the
-server's `close()`, so the drain is not protecting the response itself; there is
-no reset to discard it, which is a TCP behaviour and §2 forbids TCP.
+server's `close()`, so the drain is not protecting the response itself, and no
+reset discards it: the transport delivers queued data before it reports
+anything, measured on Linux and macOS on 2026-09-02. What Linux does report
+after the data, wherever the closer held octets it had not read, is `ECONNRESET`
+in place of end of file. A drain that stops at its bound therefore leaves a
+Linux client seeing an error after a response it already holds, which is one
+more reason a client does not read on for the end (§2).
 
 The status is the one determined when the message was rejected. A drain that
 runs to the deadline still answers `REQUEST_TOO_LARGE`, not `REQUEST_TIMEOUT`.
@@ -387,19 +392,16 @@ a correct server needs both that and the descriptor-level one.
 Because §2 makes the check best-effort, a server that never detects anything
 still conforms, which is exactly why a broken check stays undiscovered.
 
-**A client needs none of this.** §2 has the server shut down its write direction
-as soon as it has written the response, whether or not it still owes a drain, so
-the end reaches the client while the drain runs rather than after it. A client
-reads once more and requires end of file.
-
-That read is not only the excess-octet check. §2 makes the end part of the
-transfer, so a client holding every declared octet and no end has no response
-yet: it has not finished reading, and if its deadline expires there it reports
-`RESPONSE_TIMEOUT` and not the result it parsed. Do not shortcut the read
-because the declared octets are all in hand, and do not treat a parsed `OK` as
-an outcome before the end arrives. The deadlock the machinery above works around
-is the server's problem, and it exists because a client that omits its
-half-close leaves the server nothing to wait for.
+**A client is in the same position.** §2 delivers a message at its declared
+octets, so a client holding them holds the response, and a deadline expiring
+afterwards changes nothing: report the `result` you parsed, never
+`RESPONSE_TIMEOUT`. Do not read on to end of file to finish the exchange.
+Excess-octet detection on a client is the same best-effort check as the
+server's, a buffered-data test or a non-blocking read, and never a blocking
+read: the server may still be draining, and on Linux its eventual close arrives
+as `ECONNRESET` rather than end of file wherever it left octets unread. A client
+that requires end of file fails a conforming refusal on that platform and passes
+it on macOS, which is the divergence a developer on this machine never sees.
 
 ## Creating and publishing the socket
 

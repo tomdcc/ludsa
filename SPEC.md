@@ -62,8 +62,11 @@ The server MUST observe both of these:
 
 - **EOF on the read direction MUST NOT be treated as a closed connection.** The
   connection stays writable, and the server still owes a response.
-- **The read deadline still applies.** When a client omits the half-close, the
-  server MUST fall back to the deadline rather than wait indefinitely.
+- **The read deadline still applies.** A request is delivered at its declared
+  octets (below), so a server holding them does not need the half-close. One
+  that reads on, to observe what this section says about octets beyond the
+  declared length, MUST fall back to the deadline rather than wait indefinitely
+  for a half-close the client omitted.
 
 **A server answers once it can.** The obligation begins when it has read
 `ludsa_version_major`. That value opens every message, and until the server
@@ -104,15 +107,18 @@ MUST shut down its write direction (`shutdown(SHUT_WR)`, `CloseWrite()`), and
 MUST do so whether or not §3 owes a drain. Where it owes one it completes the
 drain after that, with its read direction still open, and closes when the drain
 ends. A server owing no drain MAY close outright instead, which ends both
-directions at once. There is no connection reuse, so a client reads to end of
-file without risk of blocking, whatever the server is still draining.
+directions at once. There is no connection reuse, so a client that reads on for
+end of file never blocks on a draining server.
 
-**A transfer is its octets and its end.** A message transfer is the declared
-octets and the end of the sender's side of it, by half-close or by a close that
-carries one. A receiver holding every declared octet and no end has not received
-the transfer. Neither side waits indefinitely for the end: each falls back on
-its deadline, and a server answers `REQUEST_TIMEOUT` there (§5) while a client
-reports `RESPONSE_TIMEOUT` (§7).
+**A message is delivered at its declared octets.** A receiver holding every
+octet the envelope declared holds the message. Nothing that happens on the
+connection afterwards changes what it holds: not the sender's side ending, in
+whatever form the receiver's platform reports a close, and not the receiver's
+own deadline expiring. A client whose deadline expires after the declared octets
+arrived therefore reports the response it holds, and a server answers the
+request it holds whether or not the client's half-close has arrived. The
+half-close each side owes is its own obligation, and the check below on octets
+beyond the declared length is what reaches anything after them.
 
 **Octets beyond the declared length.** A client or server MUST NOT process
 anything past the declared length, and SHOULD reject the exchange as
@@ -144,10 +150,10 @@ spends trying is its own choice.
 A client's own deadline has no representation on the wire, since a status
 appears only in a response and the client has already sent its request. The
 client reports it locally and never as a `REQUEST_` code. §7 has it report
-`RESPONSE_TIMEOUT` whatever had arrived, since its own deadline is what ended
-the transfer. §5 gives `REQUEST_TIMEOUT` to the server's request deadline, and a
-client whose own deadline expired has learned only that the server has not
-answered yet.
+`RESPONSE_TIMEOUT` where the deadline expired before the declared octets
+arrived, whatever had arrived by then. §5 gives `REQUEST_TIMEOUT` to the
+server's request deadline, and a client whose own deadline expired has learned
+only that the server has not answered yet.
 
 The server SHOULD bound concurrent connections. At its limit it MAY respond
 `RATE_LIMITED`, and MAY instead stop accepting and leave connections in the
@@ -345,7 +351,7 @@ A server that rejects a message before it has read all of it MUST NOT allocate
 storage for the body. It MUST send its response, then read and discard until the
 earliest of these, and MUST then close:
 
-- it reaches end of file on the read direction;
+- it reaches end of file, or an error, on the read direction;
 - it has read `2 x MAX_LENGTH` octets from the connection in total, counting the
   envelope and everything already read before it rejected;
 - §2's accept-to-complete-request deadline expires;
@@ -1806,18 +1812,19 @@ that survived.
 
 One further case observes a client that holds a complete response and no end of
 file. The driver accepts a connection, reads the request, writes a well-formed
-`AUTHENTICATE_RESPONSE` whose `result` is `OK`, and then holds the connection
-open past the client's own deadline without half-closing:
+`AUTHENTICATE_RESPONSE`, and then holds the connection open past the client's
+own deadline without half-closing:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A complete response, then the connection held open past the client's deadline | client | the client reports `RESPONSE_TIMEOUT` | F6 |
+| A complete response, then the connection held open past the client's deadline | client | the client reports that response's `result`, before its deadline | F6 |
 
-§2 makes a transfer its octets and its end, so the client has no response and
-`OK` is not an outcome it may report. No rejection reaches that rule, since
-every octet the client holds is well formed, and the answer the case forbids is
-an admission: a client reporting the `OK` it parsed returns `PAM_SUCCESS` from
-`pam_sm_authenticate` (Appendix B) on a transfer that never completed.
+§2 delivers a message at its declared octets, so the client holds the response
+and the end is nothing it waits for. A client reporting `RESPONSE_TIMEOUT` there
+has let its deadline take away a response it held. One that reports the `result`
+only once an end arrives has waited for something §2 does not make part of the
+message, and holding the connection open past the deadline is what tells either
+of them from a client that reports at once.
 
 One further case observes what a client does after it writes, which §2 requires
 of every client and no status reports. The driver accepts a connection, reads
@@ -1835,10 +1842,9 @@ the driver end of file too, and the write that follows draws `EPIPE`, or
 case's: a driver may suppress the signal or may treat termination by it as the
 failing outcome, and this document does not choose.
 
-Nothing here obliges a server to wait for end of file. It has the declared
-length and reads that many octets, so waiting would add a round trip to every
-exchange, and §2's check on octets beyond the declared length is a SHOULD it
-need not make exhaustive.
+Nothing here obliges a server to wait for end of file. §2 delivers the request
+at its declared octets, and its check on octets beyond the declared length is a
+SHOULD a server need not make exhaustive.
 
 It SHOULD reject the following. A conforming receiver may accept or reject it,
 so it carries no expected outcome. The *against* and status columns mean what
@@ -1909,9 +1915,9 @@ still conforming:
 | `RESPONSE_MALFORMED` | the response was structurally wrong, or a field in it was defective or above its §3.1 maximum |
 | `RESPONSE_TOO_LARGE` | the response declared a length above `MAX_LENGTH` |
 | `RESPONSE_UNSUPPORTED` | the response carried a `msg_type` the client does not implement |
-| `RESPONSE_INCOMPLETE` | the server ended the transfer before a complete response had arrived |
-| `RESPONSE_ABSENT` | the server ended the transfer with no response octet sent |
-| `RESPONSE_TIMEOUT` | the client's deadline expired before the transfer ended |
+| `RESPONSE_INCOMPLETE` | the server's side ended, by end of file or an error, before the declared octets had arrived |
+| `RESPONSE_ABSENT` | the server's side ended with no response octet sent |
+| `RESPONSE_TIMEOUT` | the client's deadline expired before the declared octets had arrived |
 | `CONNECTION_FAILED` | the client never established a connection it was willing to use |
 | `INVALID_REQUEST` | the caller's own input could not be carried in a conforming request |
 
@@ -1932,13 +1938,14 @@ A code that carries no direction serves both sides. A client reports
 relays `UNAVAILABLE`, `INTERNAL_ERROR`, `RATE_LIMITED` and `PEERCRED_DENIED` as
 the server sent them.
 
-What ended the transfer decides which of the three a client reports, and how
-much arrived decides only between the first two. Where the server ended it, a
-client that read no octet reports `RESPONSE_ABSENT` and one that read any
-reports `RESPONSE_INCOMPLETE`. Where the client's own deadline ended it, the
-client reports `RESPONSE_TIMEOUT` whatever had arrived, because a transfer
-without its end is not a response (§2): a client holding every declared octet
-and no end holds no outcome. It MUST NOT report any of them as a decision.
+How much had arrived when the wait ended decides which of the three a client
+reports. Where the server's side ended it, a client that read no octet reports
+`RESPONSE_ABSENT` and one that read any reports `RESPONSE_INCOMPLETE`. Where its
+own deadline ended it first, the client reports `RESPONSE_TIMEOUT` whatever had
+arrived. None of the three is reached once the declared octets are in hand: a
+client holding them holds the response (§2) and reports what it says, however
+the connection ends afterwards. It MUST NOT report any of the three as a
+decision.
 
 That is not the line §2 draws, and case 15's qualification binds a server only.
 A server needs `ludsa_version_major` entire before it can answer at all, so
