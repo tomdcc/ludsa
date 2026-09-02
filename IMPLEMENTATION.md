@@ -34,7 +34,9 @@ if errors.Is(err, os.ErrDeadlineExceeded) { writeStatus(conn, REQUEST_TIMEOUT) }
 sends nothing, and the server believes it conforms while never once emitting a
 `REQUEST_TIMEOUT` frame. Call `SetWriteDeadline` afresh after the read deadline
 has fired and before writing, which is what §2's separate response deadline is
-asking for anyway.
+asking for anyway. The same applies to a server that held the request and read
+on for excess octets until the deadline fired: §2 has it answer the request it
+holds, and the write needs a fresh deadline.
 
 The fault is invisible under `net.Pipe`, which has its own deadline
 implementation, and invisible in any test where the deadline never fires.
@@ -102,10 +104,12 @@ the specification does not ask for.
 
 **Read the version word on its own, not the whole envelope.** A server that
 takes the envelope in one 8-octet `io.ReadFull` gets `io.ErrUnexpectedEOF` from
-a one-octet request. The table above would answer it. §2 says the opposite:
-below two octets there is no version to answer in, so the server closes without
-replying. Splitting the first read at two octets puts the threshold where §2
-puts it.
+a three-octet request as much as from a one-octet one. The version word is
+complete in the first, so §2's obligation to answer has begun and
+`REQUEST_INCOMPLETE` is owed, and a server treating every `io.ErrUnexpectedEOF`
+from the envelope read as silence closes without it. Splitting the first read at
+two octets puts the threshold where §2 puts it, and inspecting `n` is the other
+way.
 
 The client's threshold is one octet, not two, and §7 case 24 pins it. A client
 reports `RESPONSE_INCOMPLETE` for the same truncation that leaves a server
@@ -258,6 +262,12 @@ unauthenticated CPU burn reachable without authenticating.
 
 The response goes out before the drain starts, so a client blocked in `read`
 gets its answer without waiting for the drain to finish.
+
+**Go: `net.Listener.Accept` returns a `net.Conn`, which has no `CloseWrite`.** A
+server written against the interface reaches for `Close()` where §2 asks for a
+half-close, and fails the further-octets case, since the driver never sees end
+of file before its write. Accept with `(*net.UnixListener).AcceptUnix`, or
+assert `*net.UnixConn`.
 
 **The sketch above never consults the declared length, and that is fine.** §3
 makes it a permission to stop early rather than one of the drain's terminators,
@@ -505,6 +515,12 @@ already applied §2's test.
   taking over would have been right.
 - **Lock file.** The robust answer, at the cost of a second path to configure.
 
+**Go: `net.Listen` unlinks the path at `Close()` whenever it created the
+socket**, on this route as on the rename route. An instance shutting down after
+a successor has taken the path removes the successor's socket, and the successor
+learns of it from its clients. `SetUnlinkOnClose(false)`, and an explicit unlink
+of a path the instance still owns, avoids it.
+
 ## The socket's directory
 
 §2 states no rule about the directory, because no decidable one exists. Root
@@ -557,7 +573,7 @@ self-sustaining outage: the server is pinned at 100% precisely when it has no
 descriptors left to authenticate with. `net/http`'s `Server.Serve` carries an
 explicit backoff for this and a hand-rolled loop inherits nothing;
 `net.Error.Temporary()` is deprecated and returns nothing useful, so the test is
-`errors.Is(err, syscall.EMFILE)` against the unwrapped `*net.OpError`.
+`errors.Is(err, syscall.EMFILE)`, which unwraps the `*net.OpError` itself.
 
 And the obvious bound, a buffered-channel semaphore acquired *after* `Accept()`
 returns, starts §2's accept-to-complete-request deadline ticking while the
@@ -845,10 +861,10 @@ credential that fails validation is a decision, so the client receives an
 U+001F, U+007F and U+0080 to U+009F, which is what "safe to log verbatim"
 amounts to once `utf8` has supplied valid encoding and no NUL. §3.1 has a server
 name the bound when it rejects a field for length, and lets it name the field.
-§5 has it describe a condition and never the octets. A server that embeds
-anything from the request anyway meets those rules awkwardly, because §3.3
-forbids it from rejecting control characters or invalid UTF-8 on input in the
-first place.
+§5 has it describe a defective `credential` as a condition and never as its
+octets. A server that embeds anything from the request anyway meets those rules
+awkwardly, because §3.3 forbids it from rejecting control characters or invalid
+UTF-8 on input in the first place.
 
 **Go: `fmt` will pass the bytes straight through.** `%s` and `%v` on a `string`
 copy it untouched, with no escaping, no validation and no error. So the most
@@ -1236,13 +1252,14 @@ framing status instead.
 immediately and the pid comparison below runs later against the same stored
 value. The comparison needs the request; the allowlist check does not.
 
-**Reading the version word and then closing in silence is conforming only for a
-refusal reached at accept.** It is the shape a peercred check acquires by
-accident: read the envelope, decide the peer is not allowed, return early. §5
-permits that for a peer it refused, and §2 forbids it for everything else, since
-a server that has read the version word and refused nothing at accept answers. A
-client cannot tell a silent close from a crashed server, which is why §5's other
-two answers are the better ones even where silence is allowed.
+**Reading the version word and then choosing to close in silence is conforming
+only for a refusal reached at accept.** It is the shape a peercred check
+acquires by accident: read the envelope, decide the peer is not allowed, return
+early. §5 permits that for a peer it refused, and §2 forbids it for everything
+else short of a failed write, since a server that has read the version word and
+refused nothing at accept answers. A client cannot tell a silent close from a
+crashed server, which is why §5's replying answers are the better ones even
+where silence is allowed.
 
 A server can read `SO_PEERCRED` and refuse a connection whose peer uid is not in
 a configured allowlist, subject to these constraints:
@@ -1276,10 +1293,11 @@ likes. That is an authentication bypass rather than only a disclosure.
 §8 leaves the mechanism unspecified, because no single check works everywhere.
 §2 keys the obligation to configuration instead. §7 drives it with F5, a driver
 socket bound, listened on and owned by a uid the client was not configured to
-expect, and asserts the client writes no octet. Where a supervisor binds the
-socket and hands the descriptor to another process (§1), a peer-credential check
-reports the supervisor's uid, and that is the uid a deployment configures the
-client with.
+expect, and asserts the client writes no octet. Where a supervisor binds and
+listens on the socket and hands the descriptor to another process (§1), a
+peer-credential check reports the supervisor's uid, since the credentials a
+client reads are the ones in effect at `listen()`, measured on Linux on
+2026-09-03. That is the uid a deployment configures the client with.
 
 These are the checks a client can be configured for. It should support whichever
 its deployment allows:

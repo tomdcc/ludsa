@@ -166,14 +166,25 @@ and the answer to that is not to block. A message is delivered at its declared
 octets on both sides, nothing that happens afterwards changes what was
 delivered, and a deadline expiring after delivery cannot take a message away.
 The transport supports it: `AF_UNIX` never discards queued data on close, which
-the same measurement confirmed on both platforms.  The client-local codes went
+the same measurement confirmed on both platforms. The client-local codes went
 back to splitting on how much arrived, which the entry on the fourth code
 records, and the round-ten case that expected `RESPONSE_TIMEOUT` for a complete
 response held open inverted rather than died: it now expects the `result`, and
 fails a client that waits for the end. The platform behaviour went to the
-guidance, where it belongs, and the one normative trace of it is that
-`RESPONSE_INCOMPLETE` and §3's drain terminator name an error alongside end of
-file.
+guidance, where it belongs, and its normative traces are §2's clause on the form
+a close is reported in, and `RESPONSE_INCOMPLETE` and §3's drain terminator
+naming an error alongside end of file.
+
+**Why reading on for excess octets is bounded, and what its expiry produces.**
+The eleventh round left a server that holds a complete request and reads on for
+excess octets with no answer to its own deadline firing. The delivery rule said
+it holds the request; §2's timeouts paragraph said an expiring request deadline
+is `REQUEST_TIMEOUT`. Two conforming servers answered `OK` and `REQUEST_TIMEOUT`
+on identical octets, which is the defect the reversal was meant to remove,
+surviving one paragraph away from it. The deadline also names a span, accept to
+complete request, that has ended by then. §2 now bounds the read and says the
+expiry is not `REQUEST_TIMEOUT`, since the request arrived, and §7 case 19
+carries the same qualification.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces
@@ -191,7 +202,9 @@ gives a driver end of file exactly as a half-close does, so a case checking only
 for end of file admits it. What separates them is the write that follows: a
 half-closed connection is still readable by the client and takes the response,
 and a closed one draws `EPIPE`. That is the mechanism §3's drain case turns on
-as well, and it is why neither case needs a fixture.
+as well. The half-close case takes F6 for the wait alone: a client that never
+half-closes holds the driver until its own deadline ends the exchange, and the
+driver has no other bound to wait to.
 
 Nothing obliges a server to wait for end of file, and the case does not create
 such an obligation. A server has the declared length and reads that many octets,
@@ -209,6 +222,11 @@ which version to answer in, and the obligation starts exactly there. Below it
 nothing has been said. A bare connect carries no request, and the common thing
 that produces one is a port scan, so an answer would go to something that asked
 nothing.
+
+The sentence below the threshold used to say flatly that a server closes without
+replying, which the paragraph after it contradicts by letting the same server
+answer in its own major version. It now says nothing obliges it to reply, and
+points at the permission.
 
 **Where the excess-octet check sits in §4's order.** It sits nowhere in it, and
 the ninth round had to say so. §4 opens by promising that a message failing more
@@ -243,11 +261,13 @@ Numbers are a tuning decision belonging to a deployment, and freezing them into
 a normative document would make a server under load unable to defend itself
 without becoming non-conforming.
 
-**Why there is no separate bound on waiting for the version word.** Earlier
-drafts had a server allow a short interval for it before answering in its own
-major version, so that a client about to send got an answer in its own version.
-The ninth round removed the interval and left the request deadline as the only
-bound.
+**Why a bound on waiting for the version word belongs to a refusal reached at
+accept and to no other server.** Earlier drafts had a server allow a short
+interval for it before answering in its own major version, so that a client
+about to send got an answer in its own version. The ninth round removed the
+interval and left the request deadline as the only bound, and the eleventh
+returned a bound to a refusal reached at accept, as the end of this entry
+records.
 
 The interval was a second deadline that was not one of §3's drain terminators,
 and that is what made it costly. When it expired, §2's request deadline was
@@ -275,15 +295,23 @@ an exception. The hazard was never a shorter bound; it was a shorter bound where
 a drain is owed. A server refusing the peer owes none, so nothing is left in
 flight for the bound to strand.
 
+The twelfth round found the neighbouring sentence asserting that a server
+deciding to answer without a version word has refused at accept. A server whose
+request deadline expired with one octet read has decided to answer and refused
+nothing. Nothing observable turned on it, since that server has met the
+terminator anyway, but the sentence claimed a population where it meant to scope
+a permission, and it now scopes the permission.
+
 The eleventh round found §2 still giving the drain as the reason no shorter
 bound exists, after the tenth had made every refusal reached at accept owe none.
-The only server that decides to answer before it has read a version word is one
-refusing at accept, so the reason was false for every server the sentence bound,
-and the concurrency refusal was denied the bound the peer refusal had on ground
-the two now share. §2 grants it to any refusal reached at accept. The rule for
-an ordinary exchange is unchanged: a server that has refused nothing waits for
-the version word under the request deadline, and the guidance still says why a
-shorter one there strands a drain.
+A server that decides to answer before it has read a version word has refused at
+accept or has met the deadline that would have bounded a drain, so the reason
+was false for every server the sentence bound, and the concurrency refusal was
+denied the bound the peer refusal had on ground the two now share. §2 grants it
+to any refusal reached at accept. The rule for an ordinary exchange is
+unchanged: a server that has refused nothing waits for the version word under
+the request deadline, and the guidance still says why a shorter one there
+strands a drain.
 
 **Why a server answers `UNAVAILABLE` as soon as it knows.** The obligation is on
 promptness rather than on holding a timer. A backend that returns an error at
@@ -306,6 +334,12 @@ nothing. Both map to the same PAM code, both mean wait and try again, and no
 client branches on which limit it met. What a client needs from the name is that
 capacity ran out and a later attempt may fare better, and that is true at either
 end.
+
+The twelfth round found the prose reading as though the two producers were the
+whole of it, against a definition covering any limit a server sets on itself. A
+server budgeting backend calls and declining an AUTHENTICATE on that budget is a
+third, and it had `RATE_LIMITED` under the table and `UNAVAILABLE` under the
+prose. The prose now names the property and gives the two as instances.
 
 **Why the retry rule states a property rather than a list.** An enumeration goes
 stale against conditions the protocol itself produces. §2 advises a server at
@@ -440,7 +474,9 @@ afford it, because a version the client chose beats one the server picked. What
 the ninth round removed was the short bound §2 used to put on that wait. It was
 a second deadline and not one of §3's drain terminators, so its expiry left a
 drain owed on a connection the server had just stopped reading, and §2's request
-deadline bounds the same set of clients without that consequence.
+deadline bounds the same set of clients without that consequence. The eleventh
+round returned that bound to a refusal reached at accept, which owes no drain,
+and the entry above on the version-word bound records why.
 
 **Why §2 stopped enumerating when a server may say nothing.** It used to close
 the list: having read the version word, a server closed without replying "only"
@@ -467,7 +503,7 @@ list is a claim about every case, and this one had already been outgrown twice
 before anyone noticed it was a claim at all.
 
 The eleventh round found that the tenth round's statement had gone a step too
-far. "What binds a server is the other end of it" read, to both reviewers
+far. "What binds a server is the other end of it" read, to two of its reviewers
 independently, as making the answer itself optional after the version word,
 against §6's MUST, §6.3 and §7, so a server that read a full request and dropped
 it under load conformed under one section and not under three. The two examples
@@ -727,8 +763,11 @@ many octets happened to arrive in one call.
 **Why a server drains at all.** Closing straight after the response leaves a
 client that is still writing to meet `EPIPE` on its next write, and `SIGPIPE`
 with it where the client has not suppressed it. The response itself is never at
-risk: §2 forbids TCP, so there is no reset, and on a unix socket what the server
-already wrote sits in the client's receive queue and survives the close.
+risk: on a unix socket what the server already wrote sits in the client's
+receive queue and survives the close, and no close discards it. What a Linux
+client may see after the response is `ECONNRESET` in place of end of file,
+wherever the server closed holding octets it had not read, which is why nothing
+has a client read on for the end.
 
 The window is not the socket buffer. A client that issues one write of a legal
 request fits it in the buffer and never blocks, whatever the server does. A
@@ -758,6 +797,15 @@ amplifier it exists to prevent.
 The rule now sits once, in §3's lead-in, with §2 and §5 pointing at it. Reading
 the version word to choose an encoding does not attach the obligation on either
 ground, since the refusal was settled before the read.
+
+**Why a rejection on excess octets sits outside the drain obligation.** The
+obligation binds a server that rejects before it has read the whole message, and
+a server rejecting on excess octets has read all of it. §3's principle says a
+server that rejected a message it asked for drains, so the case looked like an
+omission on the wrong side of it. It is not: the peer still writing there is
+writing octets the protocol forbids it to send, so nothing the server asked for
+is being cut off. The permission to discard stays, since it costs a server
+little and spares a broken client an `EPIPE`.
 
 **Why it is required rather than encouraged.** The protocol creates the
 condition. §2 has a server close after it responds, and §3 has it respond before
@@ -907,6 +955,14 @@ A server's own drain bound survives as a MAY. It never carried the termination
 guarantee, and what it does carry is a server's freedom to stop draining early,
 which §7 concedes in F4 and cannot test for.
 
+**Why an interrupted read is not the error that ends a drain.** The terminator
+said "an error on the read direction", which a C server takes from `EINTR`
+inside a host that installs handlers without `SA_RESTART`, and a non-blocking
+one takes from `EAGAIN`. Neither says the peer has stopped writing, so a server
+stopping there closes on the client the drain exists to protect, while
+conforming to the letter. The terminator now names an error that ends the read,
+and excludes the two that do not.
+
 **Why a rejection whose terminator is already met drains nothing.** That follows
 from the rule rather than being chosen, and it is worth stating because it looks
 like an omission. A rejection reached while every terminator is still unmet owes
@@ -940,6 +996,14 @@ before bounding it against the structure that contains it is where a
 memory-safety bug in this protocol would live, and it is one rule rather than
 four because the hazard is identical for the message length, a field's length, a
 map's entry count and an entry's key and value lengths.
+
+**Why the allocation rule names the discard rather than the body.** It used to
+forbid allocating storage for the body, which a server that checked the declared
+length against `MAX_LENGTH` and then allocated has already done before it
+rejects anything. Whether that breached the rule turned on reading it as being
+about timing or about the drain, and no case can observe either. Saying what it
+may not allocate for, the octets it is about to throw away, settles it in the
+direction the rule was always about.
 
 ### 3.1 Field maxima
 
@@ -1239,6 +1303,13 @@ what happens. There is no third case in which a receiver holds a known field and
 a wrong description of it, so there is nothing to cross-check and no opportunity
 to consult the wire instead of the schema.
 
+The rule named parsing "according to the type or width the tag claims", and the
+skip two paragraphs below requires skipping by exactly the width the tag claims.
+Both readings of parsing are available and they instruct oppositely. The
+prohibition is about the value: a receiver never reads one out of a field whose
+tag it cannot place. The width is what it skips by, and skipping is what it does
+instead of reading.
+
 **Why width is encoded and not just fixed-versus-dynamic.** An unknown optional
 field of a fixed type would otherwise be unskippable: the receiver knows there
 is no length prefix but not how many octets to step over. "Optional" would then
@@ -1488,6 +1559,14 @@ receiver implements, the sender has broken §3.2 by carrying the tag at all, and
 a deployment that wants strict input in an authentication path may reject on
 that ground.
 
+**Why "a minor version the receiver implements" needed defining.** The
+skip-or-reject latitude turns on it, and §7's skip case turns on its complement,
+so a driver and a receiver reading it differently disagree about a conforming
+message. Read as "is at", a 1.2 receiver must skip a 1.1 message's unknown tag;
+read as "at or below its own", it may reject. Neither reading is available from
+the words. §4.1 makes each minor version's schema contain the ones before it, so
+at or below is the reading the freeze already supports, and it is now stated.
+
 The eleventh round found a fourth copy in §5. It told a receiver to skip any
 unrecognised optional tag in an `ERROR` message, with no mention of the ceiling,
 so an `ERROR` carrying an optional field numbered 1 was skipped under §5 and
@@ -1513,6 +1592,14 @@ its own version, and §3.3 makes a minor difference safe without either side
 agreeing to anything. Rejecting a major mismatch outright makes an incompatible
 pair fail immediately and identically rather than misparse into a wrong
 authentication decision.
+
+**Why the version MUST names its exceptions.** §4 required `VERSION_UNSUPPORTED`
+for an unimplemented major version without qualification, and §2 has a server at
+its concurrency bound answer `RATE_LIMITED` to the same input. Two MUSTs on one
+message is not something an implementer can resolve, and the step-order
+paragraph beside it named only §5's peer refusal as displacing step 1. Both now
+name the property: a refusal reached at accept was settled before the version
+could be read, and nothing the version draws changes it.
 
 **Why validation runs outermost first, with the earliest failure winning.**
 Several checks can fail on one message, and without an order two conforming
@@ -1887,13 +1974,21 @@ the server has read anything. The kernel's credentials are readable there and
 can be kept, so waiting gains nothing and a server that waits has read octets
 from a peer it could already have refused.
 
-What it does next is a choice of three, and each buys something. Closing without
-replying is the only one that says nothing, so a server unwilling to disclose
-the refusal takes it. Answering at once in the server's own version costs
-nothing and tells a client configured for that version why it was refused.
+What it does next is its own choice, and each answer buys something. Closing
+without replying is the only one that says nothing, so a server unwilling to
+disclose the refusal takes it. Answering at once in the server's own version
+costs nothing and tells a client configured for that version why it was refused.
 Waiting a bounded interval for `ludsa_version_major` buys an answer the client
 can parse whatever version it speaks, at the cost of holding a connection open
-for a peer already refused.
+for a peer already refused. Reading the version word and then closing anyway is
+the same permission §2 gives any refusal reached at accept, and it buys the
+discard rather than the diagnosis.
+
+**Why the peer refusal's answers stopped being a closed list.** §5 gave three,
+and §2 then let any refusal reached at accept close without replying whether or
+not it read the version word, which is a fourth shape and the one a peercred
+check acquires by accident. A closed list is a claim about every case, and this
+one had been outgrown by a section pointing at it.
 
 **Why the specification ranks none of them and the guidance does.** Which one is
 right depends on how loaded the server is, and load is not something a wire
@@ -1938,9 +2033,9 @@ bound, which is reached alongside this check and which the entry had not
 considered. It falls the same way and for a sharper reason: `RATE_LIMITED` tells
 a peer a later attempt may fare better, which is never true of a refusal on
 identity, and it sends an operator to capacity when the fault is permissions. §5
-now leads with the property, that nothing displaces the refusal, and names those
-three answers only as instances of it, which is the same move made on §2's list
-of when a server may say nothing.
+now leads with the property, that nothing displaces the refusal, and names the
+answers it does only as instances of it, which is the same move made on §2's
+list of when a server may say nothing.
 
 A drain is a separate question and the answer falls out. §3's drain binds a
 server that rejected a message, and this refusal precedes any message, so none
@@ -2351,6 +2446,16 @@ authorise, or it is good and the authorisation answer stands on its own. The
 pair would only ever carry one piece of information, and the second field would
 be derivable from the first.
 
+**Why the second precondition needed splitting.** §6.2.1 gave
+`AUTHN_DENIED_USER_UNKNOWN` two conditions and then said, of the pair
+`AUTHN_DENIED_POLICY` excludes, that those are what it names. The table assigns
+the second only where no `user` was sent, so a request carrying a `user` that
+resolves, with a credential resolving no identity, had a reason-code by the
+paragraph and none by the table. Both readings deny, but two servers naming
+reasons named different ones. The paragraph now says which condition belongs to
+which request, and leaves that case to `AUTHN_DENIED`, which is always
+available.
+
 The code carries the distinction instead. A client that must answer at two
 points reads which decision the code belongs to.
 
@@ -2421,10 +2526,11 @@ server would. So `AUTHN_DENIED_USER_UNKNOWN` implies nothing about the
 credential, and it fails the credential step, which is the earlier and safer of
 the two.
 
-**Why an unmapped `user` may not be answered `AUTHN_DENIED_POLICY`.** For six
-rounds it could be. A server that validated the credential and then found no
-mapping had established what `AUTHN_DENIED_POLICY` requires, so both codes
-described the case and the choice fell to how the server was built.
+**Why a `user` that does not resolve may not be answered
+`AUTHN_DENIED_POLICY`.** For six rounds it could be. A server that validated the
+credential and then found no mapping had established what `AUTHN_DENIED_POLICY`
+requires, so both codes described the case and the choice fell to how the server
+was built.
 
 The seventh round joined that to the paragraph two sentences away in Appendix B.
 The codes sit on opposite sides of the credential and authorisation split, so
@@ -2817,6 +2923,16 @@ choice. The second case cannot separate them, because whether a name of zero
 octets resolves is a deployment's own fact and F3 settles only that the policy
 refuses it.
 
+**Why the over-long identity case sends no `user`.** The case was written
+without saying, and the only `user` F3 supplies is one the policy refuses, so a
+server would deny and carry no `authn_id` at all: §6.2 makes a denial with no
+identity the field meaning what it says, and no `INTERNAL_ERROR` arises. The
+case would have failed a conforming server. With no `user`, and F3 supplying a
+credential the server would answer `OK` to without one, the identity's length is
+the only thing between the server and an `OK` carrying the field. F3 also had to
+say whether the server is configured to supply `authn_id`, since one that is not
+answers the same `OK` with no field and is conforming.
+
 **Why the empty `user` case needs the fixture to say so.** An absent `user` asks
 the server not to decide. It does not bind the exchange to an empty or null
 name: the client may not care who the identity is, or may be applying its own
@@ -2892,6 +3008,13 @@ admits a caller the server denied. That is a fail-open produced by a convention
 rather than by a wire rule, and no conformance case can see it. Binding the
 client to document it puts the obligation on someone the specification can bind,
 which a rule aimed at a deployment would not.
+
+**Why the `OK` row is qualified.** The table exists so two PAM clients behave
+alike, and its `OK` row said `PAM_SUCCESS` without condition. §6.2 forbids a
+client that sent no `user` from treating `OK` as an authorisation decision, so a
+client following the table is the one that breaks the rule, and it breaks it
+open. The row now says what it presumes, and points at the obligation a client
+on that path still owes.
 
 **Why the `account` phase fails closed with no verdict.** The mapping table
 presupposes a `result`, and for ten rounds nothing said what `pam_sm_acct_mgmt`
