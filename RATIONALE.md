@@ -816,12 +816,20 @@ A server's own drain bound survives as a MAY. It never carried the termination
 guarantee, and what it does carry is a server's freedom to stop draining early,
 which §7 concedes in F4 and cannot test for.
 
-**Why `REQUEST_TIMEOUT` is the one rejection with no drain behind it.** That
-follows from the rule rather than being chosen, and it is worth stating because
-it looks like an omission. Every other early rejection is settled while the
-deadline still runs, so a drain is owed and the remaining budget pays for it.
-The timeout path is settled *by* the deadline expiring, so the budget is spent
-and the earliest terminator is met before the response goes out.
+**Why a rejection whose terminator is already met drains nothing.** That follows
+from the rule rather than being chosen, and it is worth stating because it looks
+like an omission. A rejection reached while every terminator is still unmet owes
+a drain and the remaining budget pays for it. The timeout path is settled *by*
+the deadline expiring, so the budget is spent and the earliest terminator is met
+before the response goes out.
+
+This used to name `REQUEST_TIMEOUT` as the only such rejection, and the tenth
+round found that false. `REQUEST_INCOMPLETE` covers a message that ended before
+its declared length, which is to say a message that ended at end of file, and
+end of file is the first terminator §3 lists. So that path writes and closes
+discarding nothing on exactly the same ground. Naming the property instead of
+counting the instances is what stops the sentence going stale the next time a
+terminator is reachable early.
 
 The client is not left without an answer. A response already written sits in the
 peer's receive queue and survives the close, so what a slow client loses is only

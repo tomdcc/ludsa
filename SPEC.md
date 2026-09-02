@@ -362,11 +362,13 @@ server sends one response to a connection.
 
 Where it expired before the response went out, the earliest terminator is
 already met and the drain ends at once. So a server answering `REQUEST_TIMEOUT`
-writes and closes, discarding nothing, and that is the only message rejection
-with no drain behind it: every other one is settled while the deadline still
-runs. The
-client is not left without its answer, since a response already written survives
-the close (§2), and it may take `EPIPE` on a write it had not finished.
+writes and closes, discarding nothing. So does any rejection whose terminator
+was already met when the response went out, `REQUEST_INCOMPLETE` among them,
+since a message that ended before its declared length ended at end of file. A
+rejection reached while every terminator is still unmet drains. The client is
+not left without its answer either way, since a response already written
+survives the close (§2), and it may take `EPIPE` on a write it had not
+finished.
 
 The status it sends is the one it had determined when it rejected the message.
 Neither §2's deadline nor a bound of its own, expiring during the drain, changes
