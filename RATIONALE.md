@@ -3016,6 +3016,20 @@ client following the table is the one that breaks the rule, and it breaks it
 open. The row now says what it presumes, and points at the obligation a client
 on that path still owes.
 
+**Why `AUTHN_UNKNOWN` stops the stack.** It mapped to `PAM_AUTHINFO_UNAVAIL`,
+the code the appendix itself names as the one an operator keys a fall-through
+on. §4.1 lets a minor version add a result code and §3.4 has a predating client
+read it as `AUTHN_UNKNOWN`, so a server upgrade turned every denial carrying the
+new code into a fall-through on every deployed client, with nothing on the
+client changed and nothing to detect it. The appendix already answers a code
+that says nothing, `AUTHN_DENIED`, with the outcome that assumes least, and
+§6.2.1 puts `AUTHN_UNKNOWN` on the credential side on the same ground: a client
+that cannot read the answer has not been told the credential was good. The cost
+is that a client meeting a broken server stops its stack where it used to fall
+through, which is the direction a value it cannot read should fail in.
+`STATUS_UNKNOWN` keeps the fall-through, since a status reports how a server
+handled a message rather than what it decided.
+
 **Why the `account` phase fails closed with no verdict.** The mapping table
 presupposes a `result`, and for ten rounds nothing said what `pam_sm_acct_mgmt`
 returns when it holds none for this transaction, or holds one obtained for a

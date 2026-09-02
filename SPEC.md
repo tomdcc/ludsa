@@ -2128,7 +2128,7 @@ Auth result (§6.2.1):
 | result | from `pam_sm_authenticate` | from `pam_sm_acct_mgmt` |
 |---|---|---|
 | `OK` | `PAM_SUCCESS` | `PAM_SUCCESS` |
-| `AUTHN_UNKNOWN` | `PAM_AUTHINFO_UNAVAIL` | `PAM_AUTHINFO_UNAVAIL` |
+| `AUTHN_UNKNOWN` | `PAM_AUTH_ERR` | `PAM_AUTH_ERR` |
 | `AUTHN_DENIED_CREDENTIAL` | `PAM_AUTH_ERR` | `PAM_AUTH_ERR` |
 | `AUTHN_DENIED_POLICY` | **`PAM_SUCCESS`** | `PAM_PERM_DENIED` |
 | `AUTHN_DENIED_USER_UNKNOWN` | `PAM_USER_UNKNOWN` | `PAM_USER_UNKNOWN` |
@@ -2146,6 +2146,14 @@ too.
 The `OK` row presumes the request carried a `user`. A client that sent none owes
 the authorisation step itself (§6.2), and returns `PAM_SUCCESS` only once it has
 discharged it.
+
+`AUTHN_UNKNOWN` is a decision the client could not read, and §6.2.1 places it on
+the credential side for that reason, so it takes the code every other credential
+outcome takes. Waiting does not change it: §3.4 has a receiver reach it for a
+value a later minor version assigns, and §4.1 permits that addition, so a server
+upgrade would otherwise turn a denial every deployed client used to stop on into
+one they fall through. `STATUS_UNKNOWN` keeps `PAM_AUTHINFO_UNAVAIL` because it
+is not a decision at all: an `ERROR` message says the server decided nothing.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.
