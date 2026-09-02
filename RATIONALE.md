@@ -455,6 +455,19 @@ elsewhere in this document, arriving at a MUST instead of at a number: a closed
 list is a claim about every case, and this one had already been outgrown twice
 before anyone noticed it was a claim at all.
 
+The eleventh round found that the honest statement had gone a step too far.
+"What binds a server is the other end of it" read, to both reviewers
+independently, as making the answer itself optional after the version word,
+against §6's MUST, §6.3 and §7, so a server that read a full request and dropped
+it under load conformed under one section and not under three. The two examples
+the tenth round gave of judgement, a caller already ruled out and a load-shedder
+declining to wait for a version word, both sit at accept, and §3 had already
+named that property for the drain. So the MUST is back with its exceptions
+stated as a kind of case rather than a list: a refusal reached at accept may say
+nothing, and a server that began writing finishes unless writing fails. A third
+refusal reached at accept would fall under it without anyone editing §2, which
+is what separates a property from the list that went.
+
 **Why the request deadline needed qualifying.** The unqualified sentence told a
 server to answer `REQUEST_TIMEOUT` whenever the deadline expired, including
 before two octets had arrived, which the paragraph above it forbade. §7 case 19
@@ -1560,8 +1573,8 @@ promise depends on.
 **Why the freeze is one line about tags.** A tag's number, type, width and
 required status all live in its value, so forbidding each separately would be
 four ways of saying the same thing. Widening a field or making an optional field
-required produces a different tag, which is the retirement of one field and the
-addition of another rather than a change to be forbidden.
+required produces a different tag, which is the addition of a field beside one
+that stays rather than a change to be forbidden.
 
 **Why field number 0 is reserved.** The ordering check compares each tag against
 the one before it, with zero as the value before the first. §3.3's shape checks
@@ -1590,9 +1603,20 @@ that large will not bind.
 
 The sixth round made the gaps safe rather than merely documented. A later
 version must take a number higher than every number already assigned in its
-message type (§4.1), so a retired number is closed by the same rule that keeps a
+message type (§4.1), so a skipped number is closed by the same rule that keeps a
 new field sorting after every existing one, and the next author cannot see a gap
 and take it.
+
+The eleventh round found that retirement could not survive the ceiling. §4.1 let
+a later minor version remove a field and retire its number, and the ceiling rule
+treats an unassigned number below the ceiling as proof the sender is broken, so
+a peer at the version that assigned a field, sending it to a peer at the version
+that retired it, was rejected for conforming. The fix removes the operation
+rather than carving it out: a number once assigned stays assigned in every later
+minor version, a later version may deprecate a field but keeps accepting it, and
+there is nothing to retire. A retired-number list would have been a second
+concept doing what an assigned field the receiver ignores already does, carried
+by every receiver forever.
 
 **Why a required field forces a major bump.** Every older peer rejects a message
 carrying a required tag it does not recognise. Such a field is a new major

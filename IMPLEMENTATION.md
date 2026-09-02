@@ -290,10 +290,9 @@ close.
 ## Writing to the socket
 
 **A server closing while a client is still writing is expected, not
-exceptional.** §2 lets a server close without replying in cases it does not
-enumerate. The ones this document itself produces are before it has read a
-version word, at its concurrency bound, on a peer refusal made at accept, and
-when its response deadline expires. §3 has it close when the drain ends, which
+exceptional.** §2 lets a server close without replying before it has read a
+version word, on a refusal reached at accept, and where writing fails, which its
+response deadline expiring is. §3 has it close when the drain ends, which
 narrows that window rather than removing it. A client sending a large
 `credential` will meet this. Every client therefore has to decide what a failed
 write does to it.
@@ -1233,10 +1232,13 @@ and answers the framing status instead.
 immediately and the pid comparison below runs later against the same stored
 value. The comparison needs the request; the allowlist check does not.
 
-**Reading the version word and then closing in silence is not conforming.** It
-is the shape a peercred check acquires by accident: read the envelope, decide
-the peer is not allowed, return early. §2 permits a silent close only where
-writing failed, and a client cannot tell that close from a crashed server.
+**Reading the version word and then closing in silence is conforming only for a
+refusal reached at accept.** It is the shape a peercred check acquires by
+accident: read the envelope, decide the peer is not allowed, return early. §5
+permits that for a peer it refused, and §2 forbids it for everything else, since
+a server that has read the version word and refused nothing at accept answers. A
+client cannot tell a silent close from a crashed server, which is why §5's other
+two answers are the better ones even where silence is allowed.
 
 A server can read `SO_PEERCRED` and refuse a connection whose peer uid is not in
 a configured allowlist, subject to these constraints:

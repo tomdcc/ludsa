@@ -86,21 +86,19 @@ drain.
 §4 already has a server reply in its own major version when it cannot use the
 client's; this is the same move where it has not been given one.
 
-Having read it, the server sends a response whatever the request turns out to
-be. It replies in its own major version when it does not implement the client's.
+Having read it, a server MUST send a response, whatever the request turns out to
+be, and replies in its own major version where it does not implement the
+client's. The exceptions are a property rather than a list. A refusal reached at
+accept (§3) asked nothing of the peer, so a server that refused there MAY close
+without replying, whether or not it read the version word on the way: §5's peer
+refusal is one, and a server at its concurrency bound (below) is another. And
+having begun writing a response, a server finishes it unless writing fails, its
+response deadline expiring included, or a fault leaves it unable to.
 
-This document does not enumerate the cases where a server says nothing instead.
-§5 defines one, a server that refused the peer on its credentials. The rest are
-a server's judgement and a deployment's policy, which reach further than this
-document can: one may decline to spend anything further on a caller it has
-already ruled out, and one shedding load may decline to wait for a version word
-it has no capacity to act on. A client cannot separate them, and learns only
-that no response arrived and the connection ended, which §7 names
-`RESPONSE_ABSENT`. It learns nothing about why, and nothing about whether the
-server read its request at all.
-
-What binds a server is the other end of it. Having begun writing a response it
-finishes it, unless writing fails or a fault leaves it unable to.
+A client cannot separate a server that closed on a refusal from one that failed.
+It learns only that no response arrived and the connection ended, which §7 names
+`RESPONSE_ABSENT`, and nothing about why or about whether the server read its
+request at all.
 
 **The server closes after it responds.** Having written its response the server
 MUST shut down its write direction (`shutdown(SHUT_WR)`, `CloseWrite()`), and
@@ -704,7 +702,7 @@ anything.
 
 Where the field number is at or below that message type's ceiling (§3.3), no
 version can give the tag meaning. Either the number is assigned there already,
-and §4.1 freezes that assignment. Or it is one a numbering left behind, and §4.1
+and §4.1 freezes that assignment. Or it is one every version skipped, and §4.1
 requires a later version to take a number higher than every number already
 assigned. The sender is broken and the receiver can prove it, so it MUST reject
 the message as `REQUEST_MALFORMED`, whatever minor version the message declares.
@@ -805,9 +803,11 @@ shown spares a receiver from scanning a value it is about to reject.
 Within major version 1, a later version MUST NOT change any of the following:
 
 - A tag. Its number, type, width and required status are all part of its value.
-- A field number, once used in a message type, for anything else in that
-  message type. A number whose field is removed is retired there and MUST NOT be
-  reassigned. Numbers are independent across message types (§6).
+- A field number, once assigned in a message type, for anything else in that
+  message type, or whether it is assigned at all. A later version MAY deprecate
+  a field, and MUST keep accepting it on the terms of the version that assigned
+  it, so no number is ever removed or reassigned. Numbers are independent across
+  message types (§6).
 - The message type a `msg_type` code identifies.
 - The response types a request type permits (§6).
 - A code's number or meaning, in any enumeration.
@@ -844,8 +844,7 @@ property hold: the field sorts after every field already defined there, so an
 encoder appends rather than inserting. It is also what lets a receiver reject a
 tag it can prove no version defines (§3.3), since a number at or below that
 type's ceiling can never acquire a new meaning. Version 1.0 assigns every number
-in sequence, and a number a later version skips, or one a retired field left
-behind, stays empty.
+in sequence, and a number a later version skips stays empty.
 
 A required field is the only addition here a predating peer never sees. It stops
 at step 1 of §4's order, on the major version. It reaches no tag. §3.3's rule
@@ -1450,8 +1449,8 @@ Where both put an affirmative outcome at 2, as `result` and `serving` do,
 nothing below §6's `msg_type` rule separates them.
 
 Field number 0 is reserved (§3.3). Every other number here is either assigned
-above or unassigned, and none is retired. A number whose field is later removed
-becomes retired and is never reassigned (§4.1).
+above or unassigned, and an assigned number stays assigned in every later minor
+version (§4.1).
 
 ## 7. Conformance
 
@@ -1509,9 +1508,9 @@ the client's counterpart is the name paired with the same condition below.
 Cases 17 and 30 are retired. 17 drove an unrecognised `service`, which §6.2.1
 and §6.3 now answer with `SERVICE_UNSUPPORTED` rather than a rejection. 30 drove
 a truncated message whose arrived octets carried a fault, which §4 leaves to the
-receiver. Neither number is reused, on the ground §4.1 gives for a field number:
-a citation that outlives what it named should fail to resolve rather than
-resolve to something else.
+receiver. Neither number is reused, on the ground §4.1 gives for never
+reassigning a field number: a citation that outlives what it named should fail
+to resolve rather than resolve to something else.
 
 Every version 1.0 `utf8` field is one a client may reject for its content. §5
 makes a defect in `error_detail`, `server_desc` or `authn_id` a fault in the
