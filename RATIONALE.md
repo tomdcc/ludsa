@@ -2254,6 +2254,21 @@ What does not exist is a LUDSA server that can answer without a credential.
 the correct answer, and it means the module can't serve an sshd `account` stack
 alongside publickey login.
 
+**And such a request would disclose what §6.2 lets a deployment withhold.**
+Answering on `user`, `service` and `rhost` alone tells a caller which names the
+server holds, for any name it cares to try, with no credential to produce and no
+denial to withhold. §6.2 makes naming a denial reason a deployment's choice
+because `AUTHN_DENIED_USER_UNKNOWN` discloses that much, and there the
+disclosure is bounded: a caller reaches it by sending a credential under a
+`service` the server recognises. A credential-free query removes the bound and
+the choice together, and leaves an enumeration oracle gated by nothing but the
+socket's permissions. STATUS is the precedent for a request carrying no
+credential, and what it reports is the server's own health rather than which
+principals it holds. So a later version weighing this is trading user
+enumeration for the ability to decline in stacks this protocol was not built to
+serve, and the second is worth having only where someone wants a LUDSA principal
+to log in by SSH key.
+
 ### 6.1 PING
 
 Nothing in the response is required, because the header is the substance of the

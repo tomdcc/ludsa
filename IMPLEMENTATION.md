@@ -1107,6 +1107,86 @@ self-identifying credential and its own policy, and it takes on the obligation
 the server would otherwise carry. A client on that path that treats `OK` as
 permission has moved the fail-open somewhere no server can see.
 
+## What a stack looks like
+
+Appendix B gives the codes and requires a client relying on the authorisation
+deferral to document that its stack needs an `account` line. It does not say
+what such a stack looks like, and the shape is not the one an operator arrives
+with from `pam_ldap` or `pam_sss`.
+
+**Where every user is a LUDSA principal**, both lines are `required` and there
+is nothing else to arrange:
+
+```
+auth     required  pam_ludsa.so socket=/run/ludsa/ludsa.sock
+account  required  pam_ludsa.so socket=/run/ludsa/ludsa.sock
+```
+
+The `account` line is what catches an authorisation denial, which Appendix B
+answers `PAM_SUCCESS` at `pam_sm_authenticate` and `PAM_PERM_DENIED` here.
+Without it that denial admits the caller and nothing detects the omission.
+
+**Where LUDSA principals sit beside users it does not serve**, the module has to
+stand aside, and it cannot do that on its own. The `account` phase answers from
+the verdict its own `auth` phase cached, so a user it has no verdict for draws
+`PAM_SYSTEM_ERR` rather than a report that the user is not its business. That
+takes per-code control on the `account` line, and a short-circuit ahead of it
+for the users LUDSA does not serve. Neither works without the other.
+
+```
+auth     sufficient  pam_ludsa.so socket=/run/ludsa/ludsa.sock
+auth     required    pam_unix.so
+
+account  required    pam_unix.so
+account  sufficient  pam_succeed_if.so user notingroup ludsa quiet
+account  [default=bad success=ok user_unknown=ignore] \
+         pam_ludsa.so socket=/run/ludsa/ludsa.sock
+account  required    pam_permit.so
+```
+
+The control string is the one authselect ships for `pam_sss`, and it is the
+half an operator will already know. It handles the user LUDSA answered
+`AUTHN_DENIED_USER_UNKNOWN` for, whose `account` verdict is `PAM_USER_UNKNOWN`.
+It does not handle the user whose `auth` phase never reached this module, and
+that is what the `pam_succeed_if` line is for.
+
+The ordering inside the `account` stack is the shipped one and it matters.
+`pam_unix` runs first and is `required`, so its own expiry and aging checks run
+for every user before anything short-circuits. The selector sits after it, and
+`pam_permit` at the end is what turns a recorded success into a passing stack.
+
+**The short-circuit must select every user LUDSA does not serve and no user it
+does.** It skips the `account` line. A principal that matches it therefore
+skips the check that catches an authorisation denial. The fail-open Appendix B
+is built around then comes back. A group naming the LUDSA principals is the
+selector that survives a deployment where they also hold local password
+entries, which `pam_localuser` does not. Whether a uid range works instead
+depends on the host: a PostgreSQL role need have no Unix account at all, and
+`pam_succeed_if` cannot test a uid it cannot resolve.
+
+**Unverified.** These stacks are written from the PAM control-flag semantics and
+from the profile authselect ships, and neither has been run against
+`pam_ludsa`, which does not exist yet. They belong in the Docker harness
+alongside the `PAM_MAX_RESP_SIZE` figures, and the mixed one should be run
+against a user in the group and a user outside it before it reaches a manual
+page.
+
+**Do not reach for `system_err=ignore` to make the rest of it go away.** It
+makes the stack ignore the one answer that means this module holds no verdict
+for the transaction, which is what Appendix B has fail closed, and it does so
+for every cause at once: a stack whose `auth` line was never reached, a
+`PAM_USER` changed between the phases, and a genuine fault. Appendix B binds the
+module rather than the stack, so nothing rejects that configuration. It gives
+away the property the rule exists to hold.
+
+**Some hosts have no configuration that works.** An `sshd` running publickey,
+GSSAPI or hostbased authentication reaches `pam_acct_mgmt()` without having run
+the `auth` stack, and cron never runs it at all. The module holds no verdict,
+fails closed, and no control string fixes it without the concession above.
+`RATIONALE.md` records why under §6: answering those hosts needs a request type
+carrying no credential, which version 1.0 does not define, and which would cost
+a user enumeration oracle to add.
+
 ## Not leaking through timing
 
 Two channels, and the second undoes the first if it is missed.
