@@ -1533,7 +1533,6 @@ the client's counterpart is the name paired with the same condition below.
 | 23 | An unrecognised `service` in a message that also omits `credential` | server | `REQUEST_MALFORMED` | F1 |
 | 24 | A response of exactly one octet, then end of file | client | `RESPONSE_INCOMPLETE` | |
 | 25 | A response carrying a `msg_type` the client does not implement | client | `RESPONSE_UNSUPPORTED` | |
- |
 | 27 | A declared length above `MAX_LENGTH`, in a message whose octets also carry a NUL | either | `REQUEST_TOO_LARGE` | |
 | 28 | The connection accepted and the request read, then closed with no response octet | client | `RESPONSE_ABSENT` | |
 | 29 | The connection accepted and the request read, then held open past the client's deadline | client | `RESPONSE_TIMEOUT` | F6 |
