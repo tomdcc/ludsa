@@ -1046,7 +1046,12 @@ A client MUST NOT log `error_detail`, return it, or otherwise act on it until it
 has established that the value is valid UTF-8 (§3.3), holds no control character
 and is within its §3.1 maximum. A client that does not use the value need not
 check it. One that checks and finds any of those faults SHOULD report the
-response as malformed (§7). The same holds for `server_desc` and `authn_id`.
+response as malformed (§7). The same holds for `server_desc` and `authn_id`. The
+value is the octets the field's length declared, and a client MUST make these
+checks over that extent, before it converts the value to any form that carries
+no length. Terminating it first substitutes a shorter value and checks that,
+which a NUL makes silent: two identities differing only past the NUL arrive as
+one.
 
 A server is bound to emit none of those faults. §5 forbids the control character
 and the encoding, §3.1 bounds the length, and §3.3 forbids the NUL. So a client
@@ -1357,7 +1362,11 @@ policy says about who may act as it. So the line is whether the name resolves.
 Whether any mapping reaches it, and the order a server did its work in, leave it
 where it is. A name that resolves and is then refused is `AUTHN_DENIED_POLICY`,
 and a name that does not resolve is `AUTHN_DENIED_USER_UNKNOWN` whether or not
-the credential was examined first.
+the credential was examined first. `AUTHN_DENIED_USER_UNKNOWN` carries the
+matching prohibition. A server MUST NOT answer it where the requested `user`
+resolves, or, where no `user` was sent, where it resolved an identity from the
+credential. §7 tests that, and Appendix B keys `PAM_USER_UNKNOWN` on it, which
+is the code an operator configures a module to stand aside on.
 
 Neither precondition asks a server to disclose anything. Every code that names a
 reason is optional and `AUTHN_DENIED` is always available, so this binds only a
@@ -1538,7 +1547,7 @@ the client's counterpart is the name paired with the same condition below.
 | 15 | The message ending before it is complete, after `ludsa_version_major` has been read | either | `REQUEST_INCOMPLETE` | |
 | 16 | A `msg_type` it does not accept, including a response type or `ERROR` | server | `REQUEST_UNSUPPORTED` | |
 | 18 | A STATUS `max_age` it cannot satisfy under its own limit | server | `RATE_LIMITED` | F2 |
-| 19 | The request deadline expiring after `ludsa_version_major` has been read and before the declared octets have all arrived | server | `REQUEST_TIMEOUT` | F6 |
+| 19 | The request deadline expiring after `ludsa_version_major` has been read and before the declared octets have all arrived, in octets carrying no fault the receiver could have reported | server | `REQUEST_TIMEOUT` | F6 |
 | 20 | A response carrying a `msg_type` the client implements, which the request does not permit (§6) | client | `RESPONSE_MALFORMED` | |
 | 21 | A field whose value exceeds its §3.1 maximum, in an otherwise well-framed message | server | `REQUEST_MALFORMED` | |
 | 22 | An unimplemented `msg_type` in a message that also has a repeated tag | either | `REQUEST_UNSUPPORTED` | |
@@ -1760,6 +1769,7 @@ a value its own maximum forbids:
 | case | against | expected | needs |
 |---|---|---|---|
 | A value above the §3.1 maximum of a field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F8 |
+| A NUL octet in a value bound for a `string` field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F8 |
 
 The report is what ends the case, so no deadline is needed: a client that
 connected before reporting has already failed it. §3.1 states the other half of
@@ -2008,8 +2018,9 @@ applies to it.
 
 A code that carries no direction serves both sides. A client reports
 `VERSION_UNSUPPORTED` for a response major version it does not implement, and
-relays `UNAVAILABLE`, `INTERNAL_ERROR`, `RATE_LIMITED` and `PEERCRED_DENIED` as
-the server sent them.
+relays every status it read under the name the server sent it. §5's prohibition
+reaches a code a client would report for a fault it found itself, and a status a
+server emitted is that server's statement about a request the client did send.
 
 How much had arrived when the wait ended decides which of the three a client
 reports. Where the server's side ended it, a client that read no octet reports
@@ -2189,6 +2200,8 @@ message says the server decided nothing.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.
+Where the request carried no `user`, the verdict it holds is one obtained in the
+same transaction for the identity it established under §6.2.
 Where it holds none it MUST NOT return `PAM_SUCCESS` or `PAM_IGNORE`, and SHOULD
 return `PAM_SYSTEM_ERR`: a stack that reaches this module's `account` phase
 without its `auth` phase having run, or with `PAM_USER` changed between the two,

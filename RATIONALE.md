@@ -531,6 +531,14 @@ before two octets had arrived, which the paragraph above it forbade. §7 case 19
 already carried the qualification. §2 and §7 disagreeing about the same
 condition is the shape of defect this document keeps producing at section seams.
 
+The case needed a second qualification in the thirteenth round. A stalled
+message has not ended, so the alternative to `REQUEST_TIMEOUT` is not
+`REQUEST_INCOMPLETE` and §7's truncated-and-faulty exclusion does not reach it.
+A driver that stalls behind a prefix carrying a fault gets `REQUEST_MALFORMED`
+from a server validating as it reads, under the permission §4 grants, and
+records a failure against a conforming server. The case now says the octets
+carry no fault.
+
 **Why `RATE_LIMITED` reads the version word where it can.** The concurrency
 limit is reached at accept, before anything has arrived, so answering it was the
 one status the protocol asked a server to send with nothing in hand. Reading the
@@ -1861,6 +1869,15 @@ without opening a connection. A server that receives one therefore has a peer
 that sent what §3.1 forbids, which is a sender defect like any other, and §5
 already said as much. The passage was one round five did not sweep.
 
+**Why the type half got its own case.** §3.3 forbids a client to open a
+connection for a value its field's type rejects, in the same breath §3.1 uses
+for a value above its maximum, and §7 drove only the second. In version 1.0 the
+constructible instance is a NUL in a `string`, and `user` is where it lands: a
+client that truncates at the NUL and sends the prefix asks the server about a
+different name than its host asked about. The case shares F8 and asserts what
+the maximum case asserts, that the driver's socket saw no connection, which is
+what a truncating client fails.
+
 **Why `REQUEST_TOO_LARGE` is the envelope only.** Its value is that a receiver
 reaches it from the declared length alone and answers without parsing further.
 A field maximum cannot be checked that way: the receiver has already accepted
@@ -2166,6 +2183,15 @@ The seventh round raised this as a format-string bug and answered it twice: the
 guarantee stopped over-promising, and a MUST was added forbidding a receiver to
 use the value as a format string, a template, or anything else that interprets
 its content.
+
+The thirteenth round added where the checks run. A C receiver stores the value
+before it inspects it, and the store it reaches for is a NUL-terminated buffer.
+The checks then run over a shorter value than the one that arrived, and pass
+honestly. §5's tolerance bound already names the failure that produces, two
+identities differing only in the defective octets arriving as one, and a NUL
+reaches it with no substitution at all. Binding the checks to the extent the
+field declared is what closes it, and it is the same sentence §6.2 spends on
+`credential` for the same reason.
 
 **The eighth round took the MUST back out.** A rule about what a receiver hands
 a value to is not observable on the wire, no conformance case can reach it, and
@@ -2498,6 +2524,14 @@ names exist, and that does not stop at the client: a host application behaves
 observably differently for an account it does not know, which is the leak
 OpenSSH spends effort closing. A server whose users are not public knowledge has
 a real interest in saying nothing.
+
+The thirteenth round gave `AUTHN_DENIED_USER_UNKNOWN` the prohibition
+`AUTHN_DENIED_POLICY` already carried. §6.2.1 stated it in the indicative while
+§7 had a case turning on it, so a server naming the code for a user it holds
+failed a case with no rule behind it. Appendix B is what makes that more than
+tidiness. It maps the code to `PAM_USER_UNKNOWN`, which is the entry an operator
+keys `user_unknown=ignore` on. A server free to emit it for a user it does serve
+can then make a module stand aside for a principal it owns.
 
 Until the fifth round the codes did not allow that. The two denials were
 `AUTHN_DENIED_POLICY` and `USER_UNKNOWN`, and a server that wanted to leak
@@ -3021,6 +3055,16 @@ conditions differ in what a client had to do to find them. A client reports
 line §5 draws on the server's side. Everything a client finds inside the body,
 an over-long field included, is `RESPONSE_MALFORMED`.
 
+**Why a client relays every status it read.** §7 named four to relay, which left
+the `REQUEST_` statuses and `STATUS_UNKNOWN` with nowhere to go, while Appendix
+B mapped all of them on the stated ground that a status reaches a client only in
+an `ERROR` message. A client meeting `REQUEST_TOO_LARGE` had a status §5 forbade
+it to report for a fault it found itself, and no client-local name either. §5's
+prohibition was always about a fault the client found, and a status a server
+emitted is that server's statement about a request the client did send. The list
+became the property, which is what the closed list should have been from the
+start.
+
 ## Appendix A: derived message maxima
 
 **Why derived figures are written down at all.** They are recomputable from §3.1
@@ -3099,6 +3143,14 @@ already draws. `PAM_IGNORE` is forbidden alongside `PAM_SUCCESS` because it lets
 the rest of the stack decide as though the module were not there. The project
 had treated this as a rule from the start, and only the working notes carried
 it.
+
+The thirteenth round added the path with no `PAM_USER` to key on. The rule
+presumed a `user` for the same reason the `OK` row did, and the twelfth round
+stated that presumption in the row and left it unstated here. A client on §6.2's
+optional path holds a verdict keyed to an identity it derived, so it holds
+nothing for the user it is now asked about and could never pass its own account
+phase. `pam_ludsa` always sends `user`, which is why nothing reached it, and the
+appendix binds any PAM client that adopts the mapping.
 
 **Why the three peer-identity outcomes share a code.** A socket the client
 cannot open, a peer that is not the one the client expects, and a server that
