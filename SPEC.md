@@ -800,8 +800,8 @@ status, and both conform. A message truncated with no fault in the octets that
 arrived is `REQUEST_INCOMPLETE`. The same follows wherever an earlier step's
 fault lies beyond the octets a receiver acted on: a receiver that read a
 `msg_type` it does not implement and answered may not have reached a framing
-fault after it, and one that read the message whole answers the framing fault as
-the order requires. Both conform.
+fault after it, and one that ran the framing pass before it dispatched holds
+that fault and answers it as the order requires. Both conform.
 
 **None of that is forced, deliberately.** Forcing the fault would oblige a
 receiver that reads a message whole to parse a prefix it has already given up
@@ -812,9 +812,14 @@ a peer that sends a message both short and faulty is broken twice over, and one
 that stopped because it died is not reading the response whichever status it
 gets.
 
-Steps 10 to 13 are not detectable early. A required field is missing only once
-the message ends, and the selectors, limits and decision need the whole message,
-so a receiver reaches them only after the declared octets arrive.
+Steps 10 to 13 are reached only once the declared octets have arrived, whatever
+a receiver observed before then. A required field is missing only once the
+message ends. A selector or a limit is legible as soon as its own field is, and
+the permission above covers a fault alone. A field number does not order these
+steps and can run against them: an `AUTHENTICATE_REQUEST` carries `service` at
+field 1 and `credential` at field 2, and a `STATUS_REQUEST` carries `max_age` at
+field 1 and `service` at field 2. A receiver that answered from one of those
+before the declared octets arrived has taken the order backwards.
 
 Steps 8 and 9 yield the same status, so the order between them is not
 observable and a receiver taking them the other way round conforms. The order

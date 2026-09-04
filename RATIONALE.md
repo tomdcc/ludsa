@@ -1653,9 +1653,14 @@ truer by waiting, and an unimplemented major version is already answered off the
 envelope alone.
 
 The generalisation needs its own bound, or it would license an early verdict on
-a field that has not arrived yet. Required-field presence, the selectors, the
-limits and the decision are not detectable early: a field is missing only once
-the message ends. Those still wait.
+a field that has not arrived yet. Required-field presence bounds itself, since a
+field is missing only once the message ends. The selectors, the limits and the
+decision needed the bound stated as a rule. The twelfth round's wording gave a
+reason that does not hold of them. A field number does not order the steps: a
+`STATUS_REQUEST` carries `max_age` ahead of `service`, so the limit is legible
+before the selector the order puts first. What keeps the permission off them is
+that it covers a fault. §6.2.1 makes `SERVICE_UNSUPPORTED` an answer a server
+gives, and `RATE_LIMITED` is a refusal. Those still wait.
 
 What goes in that pass is only what holds without a schema, and the boundary
 moved in the fifth round. It used to include the at-most-once rule, on the
