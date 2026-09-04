@@ -36,9 +36,10 @@ The rule states a property rather than a number, for the reason §2's socket mod
 states a bound rather than a value. The size is a platform fact and it varies
 more than two ways: Linux and Solaris carry 108, the BSDs and macOS 104, and AIX
 1023. A normative 108 would make an implementation on a smaller platform
-conforming and broken. It is not even a single number within a platform, since
-portable practice leaves room for a terminator and the usable length is one
-less.
+conforming and broken. It is not even a single number within a platform, and §2
+now fixes which number the property yields: the array less a terminator, so the
+usable length is one less, with no reliance on a platform that accepts a full
+array.
 
 The two sides configure their paths independently and need not share a string. A
 volume mounted at different points gives one socket two names, and neither side
@@ -100,12 +101,12 @@ how. Nothing on the wire distinguishes `alarm()` from a `poll()` loop, and F7
 cannot, since both report the same outcome. So the hazard is real and it belongs
 in the guidance, which now names it.
 
-That also answers the objection that would otherwise sink it, which is the one
-that removed the format-string MUST: naming one condition implies the rest are
-safe. The rest are not conforming exchanges. No conforming server sends a
-malformed response, so a client dying on one is a library bug outside this
-document, where a client dying on a close this document permits is the document
-producing the crash.
+The authorised-condition boundary also answers the objection that would
+otherwise sink it, which is the one that removed the format-string MUST: naming
+one condition implies the rest are safe. The rest are not conforming exchanges.
+No conforming server sends a malformed response, so a client dying on one is a
+library bug outside this document, where a client dying on a close this document
+permits is the document producing the crash.
 
 The client is not a peer that owns its own process. §1 has it loaded into a host
 application, and a PAM module is loaded into an `sshd` running as root rather
@@ -1280,9 +1281,25 @@ credentials and role names rather than about framing. An empty `user` reaches
 the policy layer as a name like any other, so it comes back a denial (§6.2.1),
 whether the server validated the credential first or rejected the name before
 looking. Which code names that denial turns on whether the empty name resolves
-for that deployment. An empty credential fails
-validation for any real backend. Both fail closed without the protocol having an
-opinion about the value itself.
+for that deployment. An empty credential fails validation for any real backend.
+Both fail closed without the protocol having an opinion about the value itself.
+
+**Why a sender is bound to its own schema, and not only to its own tags.** The
+thirteenth round bound a sender to the enumerated values its version assigns. It
+said §6 did the same for `msg_type`. §6 said nothing of the kind. It assigns the
+values, it tells a receiver what to do with one it does not accept, and it
+leaves a client free to put a response type in a request.
+
+The type rules had the same gap. §3.3 bound a receiver to reject a value its
+type forbids, and bound a client not to connect with one. It never bound a
+sender, and §5 and §7 both rested on a server being bound. `MAX_LENGTH` was
+another. §3 addressed every sentence about it to a receiver, and §5 told a
+client reading `REQUEST_TOO_LARGE` that its peer had sent something §3 forbade.
+
+These now sit in §3.2, beside the tag rules, which is where a sender's
+obligations already were. Stating them in one list is what stops the next
+version of this gap. A rule written for a receiver reads as complete until
+somebody looks for its other half.
 
 ### 3.3 Tags
 
@@ -2245,16 +2262,17 @@ compromised server into code execution. Of the three, `authn_id` reaches
 furthest: `error_detail` arrives only in an `ERROR`, and the identity is logged
 when everything went right.
 
-**Why the checks are bound to the field's declared extent.** A C receiver stores
-the value before it inspects it, and the store it reaches for is a
-NUL-terminated buffer. The checks then run over a shorter value than the one
-that arrived, and pass honestly. §5's tolerance bound already names the failure
-that produces, two identities differing only in the defective octets arriving as
-one, and a NUL reaches it with no substitution at all. Binding the checks to the
-extent the field declared is what closes it, and it is the same sentence §6.2
-spends on `credential` for the same reason.
+**Why the checks are bound to the field's declared extent.** The thirteenth
+round settled where they run. A C receiver stores the value before it inspects
+it, and the store it reaches for is a NUL-terminated buffer. The checks then run
+over a shorter value than the one that arrived, and pass honestly. §5's
+tolerance bound already names the failure that produces, two identities
+differing only in the defective octets arriving as one, and a NUL reaches it
+with no substitution at all. Binding the checks to the extent the field declared
+is what closes it, and it is the same sentence §6.2 spends on `credential` for
+the same reason.
 
-**What was declined with it.** The same round proposed banning U+2028, U+2029
+**What was declined with it.** The eighth round proposed banning U+2028, U+2029
 and the bidirectional overrides. Neither earns a place in the banned set. U+2028
 and U+2029 do not terminate a line for syslog or for a text log, and the parsers
 that once choked on them do not any more. The overrides mislead a human reading
@@ -2339,7 +2357,7 @@ because `AUTHN_DENIED_USER_UNKNOWN` discloses that much, and there the
 disclosure is bounded: a caller reaches it by sending a credential under a
 `service` the server recognises. A credential-free query removes the bound and
 the choice together, and leaves an enumeration oracle gated by nothing but the
-socket's permissions. STATUS and PING each carry no credential, and neither
+socket's permissions. No credential-free request type this version defines
 answers which principals a server holds: STATUS reports the server's own health,
 and PING reports that the server is there. So a later version weighing this is
 trading user enumeration for the ability to decline in stacks this protocol was
@@ -2456,23 +2474,6 @@ to the size plus a decode step in the very component this design keeps minimal.
 It is `bytes` rather than a string because the protocol is generic: another
 backend may carry a password, or something that is not text at all.
 
-**Why a sender is bound to its own schema, and not only to its own tags.** The
-thirteenth round bound a sender to the enumerated values its version assigns. It
-said §6 did the same for `msg_type`. §6 said nothing of the kind. It assigns the
-values, it tells a receiver what to do with one it does not accept, and it
-leaves a client free to put a response type in a request.
-
-The type rules had the same gap. §3.3 bound a receiver to reject a value its
-type forbids, and bound a client not to connect with one. It never bound a
-sender, and §5 and §7 both rested on a server being bound. `MAX_LENGTH` was the
-third. §3 addressed every sentence about it to a receiver, and §5 told a client
-reading `REQUEST_TOO_LARGE` that its peer had sent something §3 forbade.
-
-The three now sit in §3.2, beside the tag rules, which is where a sender's
-obligations already were. Stating them in one list is what stops the next
-version of this gap. A rule written for a receiver reads as complete until
-somebody looks for its other half.
-
 **Why the rule is general, and why `credential` still names it.** §3.2 binds
 every sender to carry a value as the octets it was given, so the obligation
 reaches `user`, `service`, `rhost`, `ruser` and `tty` as well. Stating it once
@@ -2554,6 +2555,16 @@ someone wanting that. Should it ever be added, §4.1 makes it an optional field
 in the `ERROR` message: diagnostic and never authoritative, since `result`
 remains the verdict, so an older client that skips it loses a log detail rather
 than a decision.
+
+**Why a server matches `service` by octets.** §3.2 binds a sender to carry the
+value as it was given, and the receiver's half was never stated. §6.2 states it
+for `user`, where the name goes to a policy and what that policy does with it is
+the deployment's decision. `service` is different because it selects which
+policy runs. A server comparing with `strings.EqualFold` routes a name to a
+policy that a server comparing octets answers `SERVICE_UNSUPPORTED` for. Both
+are self-consistent and both pass their own tests. F1 supplies the recognised
+and unrecognised names as opaque strings, so the conformance matrix cannot see
+the difference either.
 
 #### 6.2.1 Auth result
 
@@ -2681,6 +2692,16 @@ another credential's line. The precondition now uses the table's own word and
 says what resolving means: the server holds the name, whatever its policy says
 about who may act as it.
 
+**Why `AUTHN_DENIED_CREDENTIAL` carries a precondition too.** §6.2.1 bound the
+policy code and the unknown-user code and left the credential code free. A
+server that had established the credential was valid could still name it, and
+what that costs an operator is a reissued credential that was never the fault.
+The divergence it closes is between servers that name a reason at all. One that
+names none is left where Appendix B already leaves it, paying the
+`auth`-versus-`account` distinction as the price of saying nothing. Every code
+naming a reason stays optional and `AUTHN_DENIED` is always available, so the
+rule binds only a server that chose to name one.
+
 ### 6.3 STATUS
 
 **Why STATUS carries no credential.** Its contents are low-sensitivity: health,
@@ -2758,25 +2779,6 @@ ignoring the other two, and the sixth round put it there for that.
 Field numbers are unassigned rather than reserved, because an unassigned
 required tag is already safe by construction. A peer meeting one rejects the
 message, which is the fail-closed default the rule exists to give.
-
-**Why `AUTHN_DENIED_CREDENTIAL` carries a precondition too.** §6.2.1 bound the
-policy code and the unknown-user code and left the credential code free. A
-server that had established the credential was valid could still name it. The
-same policy denial then failed the `auth` phase against one conforming server
-and passed it against another, which is the defect §6.2.1 exists to close, in
-the safe direction. What it costs an operator is a reissued credential that was
-never the fault. Every code naming a reason stays optional and `AUTHN_DENIED` is
-always available, so the rule binds only a server that chose to name one.
-
-**Why a server matches `service` by octets.** §3.2 binds a sender to carry the
-value as it was given, and the receiver's half was never stated. §6.2 states it
-for `user`, where the name goes to a policy and what that policy does with it is
-the deployment's decision. `service` is different because it selects which
-policy runs. A server comparing with `strings.EqualFold` routes a name to a
-policy that a server comparing octets answers `SERVICE_UNSUPPORTED` for. Both
-are self-consistent and both pass their own tests. F1 supplies the recognised
-and unrecognised names as opaque strings, so the conformance matrix cannot see
-the difference either.
 
 ## 7. Conformance
 
@@ -3153,9 +3155,9 @@ it to report for a fault it found itself, and no client-local name either. §5's
 prohibition was always about a fault the client found, and a status a server
 emitted is that server's statement about a request the client did send. The list
 became the property, which is what the closed list should have been from the
-start. The property carries two routes, since a status a client does not
-recognise reaches it under no name the server sent: it relays what it read, or
-records `STATUS_UNKNOWN` for a value §3.4 gives it no name for.
+start. The property covers a status a client does not recognise, which reaches
+it under no name the server sent: it relays what it read, or records
+`STATUS_UNKNOWN` for a value §3.4 gives it no name for.
 
 ## Appendix A: derived message maxima
 
@@ -3290,19 +3292,20 @@ The peer-identity outcomes are asked to move together for the same reason they
 share a default. An administrator deciding that a peer refusal should stop the
 stack means every view of it a client can name, not the half the server happened
 to detect. The tie reaches a `CONNECTION_FAILED` the client got by refusing the
-server's identity or by being refused the socket, and stops there. Both are
-permanent until somebody edits a configuration, which is the property the tie
-turns on, and the fourteenth round widened it to the second after finding this
-entry still counting three positions where Appendix B named two. It cannot reach
-a server that refuses in silence. §5 lets one close without replying, and the
-client is then left with `RESPONSE_ABSENT`, which §2 makes indistinguishable
-from a server that failed, so the default is the only thing that governs it. The
-tenth round widened that name to any connection a client was unwilling to use,
-so it now also covers conditions that clear on a retry, and a socket that is not
-there yet is the ordinary startup-order case. One setting across the whole name
-would make a boot race stop a stack that an administrator had configured against
-a misconfiguration. The thirteenth round found that, and the reviewer who found
-it was reading the objection record rather than this file.
+server's identity or by a permission failure on the socket, and stops there.
+Each is permanent until somebody edits a configuration, which is the property
+the tie turns on, and the fourteenth round widened it to the second after
+finding this entry still counting three positions where Appendix B named two. It
+cannot reach a server that refuses in silence. §5 lets one close without
+replying, and the client is then left with `RESPONSE_ABSENT`, which §2 makes
+indistinguishable from a server that failed, so the default is the only thing
+that governs it. The tenth round widened that name to any connection a client
+was unwilling to use, so it now also covers conditions that clear on a retry,
+and a socket that is not there yet is the ordinary startup-order case. One
+setting across the whole name would make a boot race stop a stack that an
+administrator had configured against a misconfiguration. The thirteenth round
+found that, and the reviewer who found it was reading the objection record
+rather than this file.
 
 **Why the rest is non-normative.** No mapping is right for every host.
 `pg_ludsa` has no PAM, and a client with a host that distinguishes more finely

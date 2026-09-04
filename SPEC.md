@@ -67,8 +67,9 @@ The server MUST observe both of these:
   defer its response. One that looks for octets beyond the declared length
   checks what has already arrived. Where a rejection owes a drain (§3), anything
   later is observed there, and a server that has reached the drain has answered.
-  A server that answered the message it held owes no drain, and observes nothing
-  after its response.
+  A server that answered the message it held owes no drain, and nothing obliges
+  it to look for anything after its response. §4 says what it does where it
+  observes something anyway.
 
 **A server answers once it can.** The obligation begins when it has read
 `ludsa_version_major`. That value opens every message, and until the server
@@ -109,9 +110,10 @@ MUST do so whether or not §3 owes a drain. Where it owes one it completes the
 drain after that, with its read direction still open, and closes when the drain
 ends. A server owing no drain MAY close outright instead, which ends both
 directions at once. There is no connection reuse, so a client that reads on for
-end of file never blocks on a draining server. It MUST NOT require end of file
-to complete an exchange whose declared octets it already holds, since a server
-closing with octets still unread may end that read in an error instead (§7).
+end of file never blocks on a draining server. A client MUST NOT require end of
+file to complete an exchange whose declared octets it already holds, since a
+server closing with octets still unread may end that read in an error instead
+(§7).
 
 **A message is delivered at its declared octets.** A receiver holding every
 octet the envelope declared holds the message. Nothing that happens on the
@@ -496,7 +498,9 @@ When it emits a message, a client or server MUST:
 - Emit a value it is passing on as the octets it was given.
 - Emit a `msg_type` its own version assigns, and a request type in a request.
 - Emit a value its field's type permits.
-- Declare no `length` greater than `MAX_LENGTH`.
+- Emit every field its message type requires.
+- Declare no `length` above `MAX_LENGTH`, and none below the minimum for its
+  version.
 
 Ascending order binds every message, so a receiver checks it against the tag
 before it without knowing which schema applies. Whether a repeat is legal does
@@ -505,10 +509,10 @@ points, and a receiver that rejects a repeat before it knows the type is
 refusing a message it cannot adjudicate.
 
 The rule against emitting an undefined tag binds a sender to its own version and
-not to 1.0, because a later version emits tags 1.0 never assigned (§4.1). What
-it forbids is emitting a tag no version defines. A receiver skips one, so
-nothing breaks today; what breaks is later, when a minor version assigns that
-tag and a peer implementing it reads the padding as the field.
+not to 1.0, because a later version emits tags 1.0 never assigned (§4.1). That
+is narrower than it sounds today: a receiver skips such a tag, so nothing breaks
+now. What breaks is later, when a minor version assigns that tag and a peer
+implementing it reads the padding as the field.
 
 It binds a sender. What a receiver does about a breach is §4's, and it turns on
 the tag's field number rather than on the version the message declares.
@@ -552,8 +556,8 @@ from 1.
 | `utf8` | `0x3` | dynamic | MUST NOT contain a NUL octet; MUST be valid UTF-8 |
 | `bytes` | `0x4` | dynamic | none |
 
-A sender MUST NOT emit a value its field's type does not permit (§3.2). A client
-asked to send one MUST NOT open a connection to send it, and reports the
+§3.2 binds a sender to the values its field's type permits. A client asked to
+send one it does not MUST NOT open a connection to send it, and reports the
 condition §7 names `INVALID_REQUEST` to its host application. §3.1 says the same
 for a value above its maximum. Neither lets a client alter the value to make it
 sendable (§3.2).
@@ -876,12 +880,13 @@ which number changes, and what a peer that predates the addition does with it:
 | a new value in the **type** table | minor | skips an optional field using it (§3.3) |
 | a **required** field | major | answers `VERSION_UNSUPPORTED` (§4) |
 
-A later version MUST NOT assign a field that takes a message type's derived
-maximum (Appendix A) above `MAX_LENGTH`. `MAX_LENGTH` is frozen and every field
-maximum is frozen, so each message type's headroom is fixed at 1.0 and an
-addition spends it. Without this a version could define a message legal under
-its own schema that every conforming receiver, one implementing that version
-included, MUST reject as `REQUEST_TOO_LARGE` (§3).
+A later version MUST NOT assign a field that takes a message type's maximum,
+derived from §3.1's field maxima and §6.4's assignments as Appendix A shows,
+above `MAX_LENGTH`. `MAX_LENGTH` is frozen and every field maximum is frozen, so
+each message type's headroom is fixed at 1.0 and an addition spends it. Without
+this a version could define a message legal under its own schema that every
+conforming receiver, one implementing that version included, MUST reject as
+`REQUEST_TOO_LARGE` (§3).
 
 A new optional field MAY be repeatable from the version that assigns it. A peer
 that predates it does not recognise the tag, so it skips each occurrence (§3.3)
@@ -1385,9 +1390,9 @@ established that the credential was valid, since that is what the code states.
 where it established that the credential was valid, since a deployment reading
 it reissues a credential that was never the fault.
 
-It carries a second precondition for the same reason. A server MUST NOT answer
-`AUTHN_DENIED_POLICY` where the requested `user` does not resolve, or where it
-resolved no identity from the credential. The first is what
+`AUTHN_DENIED_POLICY` carries a further precondition, and for the reason its
+first one has. A server MUST NOT answer it where the requested `user` does not
+resolve, or where it resolved no identity from the credential. The first is what
 `AUTHN_DENIED_USER_UNKNOWN` names with a `user`, and the second is what it names
 without one. With a `user` that resolves and no identity from the credential,
 `AUTHN_DENIED_USER_UNKNOWN` is untrue, and `AUTHN_DENIED` is available as it
@@ -1453,6 +1458,10 @@ Response:
 |---|---|---|---|
 | `serving` | `enum`, 1 octet | required | `0x0181` |
 | `server_desc` | `utf8` | optional | `0x0243` |
+
+`server_desc` is the field §6.1 defines, carried here under its own tag (§6.4).
+Everything §6.1 says about it holds, the prohibition on a control character
+included.
 
 `serving` is the readiness signal:
 
@@ -1554,9 +1563,11 @@ SHOULD, so the table of SHOULD-report cases below carries that direction.
 *Needs* names a fixture this document does not define. F7 is a precondition of
 every case that reads an outcome from the client under test, rather than of any
 one case, so the column does not repeat it. A case whose assertions are all on
-the wire does not need it. F11 sits there for the same reason: §6 obliges a
-server to implement no particular request type, so every case that drives one is
-a case the peer may not answer, and the column does not repeat that either.
+the wire does not need it. F11 sits there for the same reason: which message
+types a peer implements conditions every case that drives one, since §6 obliges
+a server to implement no particular request type, and which response types a
+driver can put in front of a client follows from the requests that client sends.
+The column does not repeat it either.
 
 Every case driven against a server is answerable once the connection is one the
 server will serve, because each carries at least a version word and a server can
@@ -1778,14 +1789,14 @@ available either; the driver does not half-close, so there is no end of file;
 and an envelope plus a kilobyte is far below `2 x MAX_LENGTH`.
 
 A driver checks the encoding of every response it receives on §4's terms: no tag
-lower than the tag before it, and each recognised tag appearing at most once.
-Equal tags are not a breach, since §4.1 lets a later minor version assign a
-repeatable field. Where a response declares a `ludsa_version_minor` the driver
-implements, it also records a tag that version does not define for that message
-type, which is the sender breaking §3.2. It records rather than rejects: whether
-to reject is a receiver's own choice (§4), and against a higher minor version
-the check cannot be made at all, since the driver does not hold the schema that
-would settle it.
+lower than the tag before it, and each recognised tag appearing at most once. A
+repeat the driver does not recognise is no breach, since §4.1 lets a later minor
+version assign a repeatable field and the driver holds no schema for one. Where
+a response declares a `ludsa_version_minor` the driver implements, it also
+records a tag that version does not define for that message type, which is the
+sender breaking §3.2. It records rather than rejects: whether to reject is a
+receiver's own choice (§4), and against a higher minor version the check cannot
+be made at all, since the driver does not hold the schema that would settle it.
 
 It checks their content on the same terms, over every field it recognises: no
 enumerated value of 0 or 1 (§3.4), no `utf8` value carrying a control character
@@ -1821,7 +1832,7 @@ refuses, and writes a complete request:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A complete `AUTHENTICATE_REQUEST` on a connection from a uid the server refuses | server | the server serves no request: it closes without replying, or answers `PEERCRED_DENIED` on §5's terms, and no `AUTHENTICATE_RESPONSE` arrives | F1, F3, F12 |
+| A complete `AUTHENTICATE_REQUEST` on a connection from a uid the server refuses | server | the server serves no request: it closes without replying, or answers `PEERCRED_DENIED` on §5's terms, and no `AUTHENTICATE_RESPONSE` arrives | F1, F12 |
 
 §5 leaves a refusing server its choice of answer, so what the case asserts is
 what every shape of that choice shares: nothing the request asked for. A driver
@@ -2145,10 +2156,10 @@ against a `MAX_LENGTH` of 32768.
 
 **These are what a version 1.0 peer emits, not what a receiver may insist on.**
 A later minor version may add optional fields, so every figure here can grow
-within major version 1. §3 still requires accepting any declared length up to
-`MAX_LENGTH`, and §3.3 still requires skipping an unrecognised optional field. A
-receiver that rejects a message for exceeding a figure in this table is not
-conforming.
+within major version 1, up to the ceiling §4.1 sets. §3 still requires accepting
+any declared length up to `MAX_LENGTH`, and §3.3 still requires skipping an
+unrecognised optional field. A receiver that rejects a message for exceeding a
+figure in this table is not conforming.
 
 ## Appendix B: mapping to PAM
 
@@ -2198,13 +2209,13 @@ is the one place where the test of what a stack does rather than what an entry
 point returns has to be applied.
 
 `PEERCRED_DENIED`, and a `CONNECTION_FAILED` a client reached by refusing the
-server's identity or by being refused the socket, describe one condition from
-opposite ends: a client and a server that a configuration does not permit to
-talk. Each is permanent until somebody changes a configuration, which is what
-separates them from the retryable conditions the same name also covers. A client
-that offers an override SHOULD apply one setting across them, so an
-administrator who changes how a peer refusal behaves changes every view of it a
-client can name. A server that refuses in silence (§5) leaves the client
+server's identity or by a permission failure on the socket, describe one
+condition from opposite ends: a client and a server that a configuration does
+not permit to talk. Each is permanent until somebody changes a configuration,
+which is what separates them from the retryable conditions the same name also
+covers. A client that offers an override SHOULD apply one setting across them,
+so an administrator who changes how a peer refusal behaves changes every view of
+it a client can name. A server that refuses in silence (§5) leaves the client
 `RESPONSE_ABSENT`, which §2 makes indistinguishable from a server that failed,
 so no override reaches that shape and the default is what it gets.
 `CONNECTION_FAILED` also covers conditions that clear on a retry, such as a

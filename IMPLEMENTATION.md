@@ -247,7 +247,7 @@ the check passes, and the read runs past the buffer. Establish `off <= buflen`
 first, then compare without the addition:
 
 ```c
-if (len > (uint32_t)(buflen - off)) return LUDSA_MALFORMED;   /* right */
+if (len > buflen - off) return LUDSA_MALFORMED;   /* right */
 ```
 
 ## Draining a rejected message
@@ -277,9 +277,9 @@ unauthenticated CPU burn reachable without authenticating.
 The response goes out before the drain starts, so a client blocked in `read`
 gets its answer without waiting for the drain to finish.
 
-**The half-close goes between the response and the drain.** §2 orders the three:
-write the response, `CloseWrite()`, then drain, then `Close()`. A handler that
-opens with `defer c.Close()` and calls neither, or that half-closes after the
+**The half-close goes between the response and the drain.** §2 fixes the order:
+write the response, `CloseWrite()`, drain, `Close()`. A handler that opens with
+`defer c.Close()` and never calls `CloseWrite()`, or that half-closes after the
 drain loop, holds the driver on its read until the drain ends. §7's
 further-octets case asserts both halves. End of file proves the write direction
 shut, and the accepted write proves the drain was still running when it did. A
@@ -704,6 +704,16 @@ and the echo happens in the handler above it. §7 drives it, so a conformance ru
 catches what your own tests will not. Build the response envelope from your own
 version rather than from the one you parsed.
 
+**The zero value is a hazard on encode as well as on decode.** §3.4 binds a
+sender: it MUST NOT emit 0 or 1 in any enumeration. Go's zero value breaches
+that without anyone choosing it, because a handler that returns an empty
+response struct on an internal-failure path emits `result` 0 or `status` 0. A
+`wire` suite cannot see it, since vectors compare a codec against fixed bytes
+and the zero arrives from the handler above them, and §7 records that no input
+provokes the breach, so a conformance run cannot see it either. Give the
+enumeration types no usable zero: an explicit unset constant, and an encoder
+that rejects it rather than trusting the handler to have set it.
+
 **The same warning applies on decode, for the opposite reason.** A map catches
 a repeated tag for free, which is what makes it tempting, and it discards the
 ordering §7 case 6 requires. The check has to happen while scanning, comparing
@@ -719,6 +729,15 @@ server does not implement it is `REQUEST_UNSUPPORTED`, and rejecting early gets
 that wrong. Track only the tags your schema defines: §3.3 has you skip every
 occurrence of an unrecognised optional tag, since a later minor version may
 assign one that repeats and you hold no schema to judge it by.
+
+**Check the offset once the scan reaches `TAG_END`.** The natural loop returns
+as soon as it reads the terminator, which reports success with octets still
+unconsumed inside the declared length. That is §7's trailing-octets case, and it
+is silent in a server that read the body with `io.ReadFull` into a slice,
+because the surplus is sitting in the buffer with nobody looking. Assert that
+the offset equals the declared length before returning, or you have implemented
+the case that rejects a message reaching its end without a terminator and not
+the one that rejects a terminator reached with the length unspent.
 
 After the scan the representation is free. Ordering is a property of the
 encoding and not of the decoded message, so handing an application a map is
