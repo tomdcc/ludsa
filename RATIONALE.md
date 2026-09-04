@@ -175,16 +175,26 @@ guidance, where it belongs, and its normative traces are §2's clause on the for
 a close is reported in, and `RESPONSE_INCOMPLETE` and §3's drain terminator each
 naming, alongside end of file, an error that ends the read.
 
-**Why reading on for excess octets is bounded, and what its expiry produces.**
-The eleventh round left a server that holds a complete request and reads on for
-excess octets with no answer to its own deadline firing. The delivery rule said
-it holds the request; §2's timeouts paragraph said an expiring request deadline
-is `REQUEST_TIMEOUT`. Two conforming servers answered `OK` and `REQUEST_TIMEOUT`
-on identical octets, which is the defect the reversal was meant to remove,
-surviving one paragraph away from it. The deadline also names a span, accept to
-complete request, that has ended by then. §2 now bounds the read and says the
-expiry is not `REQUEST_TIMEOUT`, since the request arrived, and §7 case 19
-carries the same qualification.
+**Why reading on for excess octets does not wait.** The eleventh round left a
+server that holds a complete request and reads on for excess octets with no
+answer to its own deadline firing. The delivery rule said it holds the request;
+§2's timeouts paragraph said an expiring request deadline is `REQUEST_TIMEOUT`.
+Two conforming servers answered `OK` and `REQUEST_TIMEOUT` on identical octets,
+which is the defect the reversal was meant to remove, surviving one paragraph
+away from it. The deadline also names a span, accept to complete request, that
+has ended by then. The twelfth round bounded the read and said the expiry is not
+`REQUEST_TIMEOUT`.
+
+The thirteenth round removed the wait, which is what the bound had been
+managing. A server that waits defers a response it already owes, and nothing in
+that response depends on octets the delivery rule puts outside the message. The
+check was best-effort in any case, since §2 concedes the excess may not have
+arrived and obliges nobody to wait for it, so the bound bought a racy diagnostic
+at the price of the whole request budget. §3's drain observes anything later for
+nothing, after the response has gone, and a server there can log what it finds.
+Deleting the wait deletes the seam with it: where there is no bound there is no
+expiry, and the qualification the twelfth round added has nothing left to
+qualify.
 
 **Why EOF is not a reason to abandon the exchange.** Treating a half-close as a
 closed connection is the obvious way to implement this wrongly, and it produces

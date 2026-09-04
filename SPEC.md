@@ -62,12 +62,11 @@ The server MUST observe both of these:
 
 - **EOF on the read direction MUST NOT be treated as a closed connection.** The
   connection stays writable, and the server still owes a response.
-- **Reading on is bounded.** A request is delivered at its declared octets
-  (below), so a server holding them does not need the half-close. One that reads
-  on, to observe what this section says about octets beyond the declared length,
-  MUST bound that read, by its request deadline or a shorter bound of its own,
-  and answers the request it holds when the bound expires with no excess octet
-  observed. That expiry is not `REQUEST_TIMEOUT`, since the request arrived.
+- **Reading on does not wait.** A request is delivered at its declared octets
+  (below), so a server holding them does not need the half-close and does not
+  defer its response. One that looks for octets beyond the declared length
+  checks what has already arrived. §3's drain is where anything later is
+  observed, and a server that reaches it has answered.
 
 **A server answers once it can.** The obligation begins when it has read
 `ludsa_version_major`. That value opens every message, and until the server

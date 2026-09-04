@@ -34,9 +34,7 @@ if errors.Is(err, os.ErrDeadlineExceeded) { writeStatus(conn, REQUEST_TIMEOUT) }
 sends nothing, and the server believes it conforms while never once emitting a
 `REQUEST_TIMEOUT` frame. Call `SetWriteDeadline` afresh after the read deadline
 has fired and before writing, which is what §2's separate response deadline is
-asking for anyway. The same applies to a server that held the request and read
-on for excess octets until the deadline fired: §2 has it answer the request it
-holds, and the write needs a fresh deadline.
+asking for anyway.
 
 The fault is invisible under `net.Pipe`, which has its own deadline
 implementation, and invisible in any test where the deadline never fires.
