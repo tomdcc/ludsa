@@ -1134,21 +1134,40 @@ takes per-code control on the `account` line, and a short-circuit ahead of it
 for the users LUDSA does not serve. Neither works without the other.
 
 ```
+auth     [success=1 default=ignore] \
+         pam_succeed_if.so user notingroup ludsa quiet
 auth     sufficient  pam_ludsa.so socket=/run/ludsa/ludsa.sock
 auth     required    pam_unix.so
 
-account  required    pam_unix.so
-account  sufficient  pam_succeed_if.so user notingroup ludsa quiet
+account  [success=ok user_unknown=ignore default=bad] pam_unix.so
+account  [success=1 default=ignore] \
+         pam_succeed_if.so user notingroup ludsa quiet
 account  [default=bad success=ok user_unknown=ignore] \
          pam_ludsa.so socket=/run/ludsa/ludsa.sock
 account  required    pam_permit.so
 ```
 
-The control string is the one authselect ships for `pam_sss`, and it is the
-half an operator will already know. It handles the user LUDSA answered
-`AUTHN_DENIED_USER_UNKNOWN` for, whose `account` verdict is `PAM_USER_UNKNOWN`.
-It does not handle the user whose `auth` phase never reached this module, and
-that is what the `pam_succeed_if` line is for.
+**The `auth` line needs the selector as much as the `account` line does.**
+Without it `pam_ludsa` runs for every login, and the module obtains its
+credential by prompting, so a local user types a password that goes to the LUDSA
+server as `credential`. That server may be an unprivileged sidecar and is by
+design a different trust domain from the `sshd` or the backend the module is
+loaded into. The protocol has nothing to say about it: `credential` is carried
+verbatim to whoever the socket reaches, and nothing lets a server decline to
+have received it. The selector is what keeps the module off users it has no
+business authenticating.
+
+`pam_unix` on the `account` line carries `user_unknown=ignore` because a LUDSA
+principal need have no local account, which the uid-range paragraph below says
+outright. Left `required`, its `PAM_USER_UNKNOWN` is recorded before anything
+short-circuits and no later success clears it, so the stack fails for exactly
+the principals it was written to serve.
+
+The control string on the `pam_ludsa` line is the one authselect ships for
+`pam_sss`, and it is the half an operator will already know. It handles the user
+LUDSA answered `AUTHN_DENIED_USER_UNKNOWN` for, whose `account` verdict is
+`PAM_USER_UNKNOWN`. It does not handle the user whose `auth` phase never reached
+this module, and that is what the `pam_succeed_if` line is for.
 
 The ordering inside the `account` stack is the shipped one and it matters.
 `pam_unix` runs first and is `required`, so its own expiry and aging checks run
@@ -1186,6 +1205,80 @@ fails closed, and no control string fixes it without the concession above.
 `RATIONALE.md` records why under §6: answering those hosts needs a request type
 carrying no credential, which version 1.0 does not define, and which would cost
 a user enumeration oracle to add.
+
+**How the module gets the credential, and what it must not do with it.**
+Neither host pre-sets `PAM_AUTHTOK`. PostgreSQL's conversation function asks its
+client for the password only when a module prompts, and `sshd` holds the one the
+client sent and answers each prompt from it. So a module has to run the
+conversation to get anything at all, and the call it reaches for first is the
+wrong one.
+
+`pam_get_authtok()` bundles three behaviours and only the middle one is wanted:
+it inherits an already-set `PAM_AUTHTOK`, prompts through the conversation where
+there is none, and publishes the result back to the item. Both ends of that
+bundle are disclosures. Publishing hands the token to every later module
+configured with `try_first_pass`, which the distro profiles this stack is
+adapted from all are, so a bearer token goes to an LDAP backend as a password.
+Inheriting means that where an earlier module already prompted, the module never
+prompts at all and puts that module's password on the socket.
+
+Call the conversation function directly. Fetch `PAM_CONV` with `pam_get_item`,
+build one `PAM_PROMPT_ECHO_OFF` message, call `conv->conv`, take `resp[0].resp`,
+and scrub and free it. It never reads `PAM_AUTHTOK` and never sets it, and it
+leaves a value an earlier module set untouched. The module owns the string, so
+it can scrub at once where `pam_get_authtok` would hold it until `pam_end`.
+`try_first_pass` and `use_first_pass` are not arguments this module accepts, and
+the rule that an unknown argument fails is what stops an operator asking for the
+behaviour by copying a line from a profile.
+
+Measured on 2026-09-04 under `postgres:17-bookworm`: a second module stacked
+after the first read the whole 1170-octet token where the acquirer used
+`pam_get_authtok`, and found nothing where it used the conversation directly.
+With `PAM_AUTHTOK` pre-seeded, `pam_get_authtok` returned the seeded value and
+never prompted. The direct call receives the same 1170 octets, so nothing is
+given up on the size the `PAM_MAX_RESP_SIZE` measurement was about.
+
+**Scrubbing buys less than it looks like.** The host's own copy lives for the
+whole PAM transaction whatever the module does, so scrubbing removes the
+module's duplicate and not the credential's presence in the process. Three
+modules stacked together each received the full token although each scrubbed
+before returning, because the host answers every prompt from the copy it holds.
+
+**Keep the prompt identical on both branches.** Selecting on group membership
+before prompting makes the prompt differ between a principal and a local user,
+and a remote caller then reads group membership off the prompt string. That is
+the disclosure §6 weighs when it declines a credential-free request type,
+reached without a socket and without a credential.
+
+**`sshd` differs from PostgreSQL in ways worth designing against.** It is the
+second host the C library is meant to sit in, and the differences are where a
+PostgreSQL-shaped assumption shows.
+
+- **The password method stops at 1024 octets.** `MAX_PASSWORD_LEN` in
+  `auth-passwd.c` is 1024 and `auth_password()` returns 0 above it, before PAM
+  is reached, so the module never runs and the failure reads as a wrong
+  password. A bound service-account token is larger than that often enough to
+  matter. Keyboard-interactive carries the same token whole. Measured
+  2026-09-04 on Debian bookworm, driving the server directly, since `sshpass`
+  truncates at 1023 octets and makes every case look identical.
+- **A second module costs a second prompt.** On PostgreSQL and on the `sshd`
+  password method the credential is held for the transaction and every
+  conversation call is answered from it. On keyboard-interactive each prompt
+  reaches the client, so two modules asked the client twice.
+- **A credential may be fabricated.** For a user that does not resolve, and for
+  root where `PermitRootLogin` forbids it, `sshd` substitutes
+  `fake_password()`: the same length, filled with a repeating pattern of
+  control characters. A 60-octet run of `0x41` arrived as 60 octets of `\b \n
+  \r \177`. So a codec that validated `credential` as text would pass every
+  PostgreSQL test and fail on `sshd`'s most common failure path, and a daemon
+  sees a request for every user name probed at port 22.
+
+**The cached verdict survives on both hosts.** A verdict stored with
+`pam_set_data` in `pam_sm_authenticate` was found by `pam_sm_acct_mgmt` on
+PostgreSQL and on both `sshd` methods, in the same process each time. This was
+worth measuring because OpenSSH runs keyboard-interactive PAM in a thread or a
+forked child, which would have put Appendix B's mechanism in doubt.
+
 
 ## Not leaking through timing
 

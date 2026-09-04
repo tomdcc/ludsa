@@ -2436,6 +2436,16 @@ the credential's identity to the requested user. A deployment that folds case is
 choosing a policy, not misparsing, so the general rule binds the sender and
 stops there.
 
+The reason `credential` is `bytes` and takes no text validation had only a
+hypothetical case behind it until the thirteenth round. `sshd` manufactures one.
+For a user that does not resolve it substitutes `fake_password()` before the
+module ever sees it, a value of the same length filled with a repeating pattern
+of control characters, so that a caller cannot tell an unknown name from a wrong
+password by timing. A codec that checked `credential` for printable text would
+pass every PostgreSQL test and reject the ordinary failure path of the other
+host the library is meant to sit in. Measured 2026-09-04, and recorded under
+R13-1.
+
 **Why no party may normalise the credential.** A signature covers exact bytes,
 so any change breaks verification. The worse failure is asymmetric. A client
 that trims and a server that does not is a parser differential in an
