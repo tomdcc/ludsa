@@ -1522,8 +1522,12 @@ every case that reads an outcome from the client under test, rather than of any
 one case, so the column does not repeat it. A case whose assertions are all on
 the wire does not need it.
 
-Every case driven against a server is answerable, because each carries at least
-a version word and a server can answer in its own major version (§2). A case
+Every case driven against a server is answerable once the connection is one the
+server will serve, because each carries at least a version word and a server can
+answer in its own major version (§2). A server making the check §5 permits
+refuses before that, and refuses every case here alike, so F12 settles whether
+it accepts the uid the driver connects from. A driver that has not established
+this cannot tell a refusal from a fault (§2). A case
 driven against a client has nothing to answer, so it reports to its caller
 instead. Where a case is marked `either`, the status shown is the server's and
 the client's counterpart is the name paired with the same condition below.
@@ -1589,6 +1593,12 @@ version does not define at a field number above that message type's ceiling
 Both conform, so it is not a case here either. At or below the ceiling only
 rejection conforms, and the rule below drives it.
 
+No case drives `UNAVAILABLE`. It reports a dependency the driver does not
+control, and a driver records one wherever a run produces it. No case drives
+`STATUS_UNKNOWN` either, because it is what a receiver substitutes for a status
+it does not recognise, and the acceptance rule below drives that substitution
+for every enumeration at once.
+
 Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
 
@@ -1653,6 +1663,11 @@ document does not specify. A driver MUST be given all of them:
   which response types a driver can put in front of it: one that sends no
   request whose response carries `server_desc` cannot be driven that field at
   all, and §6.4 assigns it in `PING_RESPONSE` and in `STATUS_RESPONSE`.
+- **F12**: whether the peer under test makes the peer-credentials check §5
+  permits, which of §5's answers it gives where it does, and whether it accepts
+  the uid the driver connects from. §5 leaves the check to a deployment and the
+  answer to the server, so neither is derivable from the wire. The second uid
+  this needs is the one F5's case already asks for.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1760,7 +1775,18 @@ connection and writes nothing:
 | A connection accepted by a peer whose identity is not the one the client was configured to expect | client | the client writes no octet and reports `CONNECTION_FAILED` | F5 |
 
 This case turns on which uid is at the far end of the socket, which is why a
-driver needs a second uid for it.
+driver needs a second uid for it. The server-side counterpart turns on the same
+uid, from the other direction. The driver connects from one F12 says the server
+refuses, and writes a complete request:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A complete `AUTHENTICATE_REQUEST` on a connection from a uid the server refuses | server | the server serves no request: it closes without replying, or answers `PEERCRED_DENIED` on §5's terms, and no `AUTHENTICATE_RESPONSE` arrives | F1, F3, F12 |
+
+§5 leaves a refusing server its choice of answer, so what the case asserts is
+what every shape of that choice shares: nothing the request asked for. A driver
+that cannot connect from a refused uid cannot run it, and is not non-conforming
+for that.
 
 One further case observes a client that never connects at all, which §3.1's
 prohibition reaches and no message can. The driver listens, and hands the client

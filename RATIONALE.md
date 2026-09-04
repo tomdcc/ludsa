@@ -2091,10 +2091,17 @@ guards what stands behind a name and an unheld name has nothing behind it. The
 other order surfaced a client's misconfigured `service` as a peer refusal, which
 sends the operator to the wrong file, and the two map to different PAM codes.
 What a refused peer learns from it, that a name is unheld, is small beside what
-`PEERCRED_DENIED` already tells it. No case drives the order, for the reason no
-case drives `PEERCRED_DENIED` at all: the check is one this document does not
-require, and a fixture for it would describe a server's policy and nothing in
-the protocol.
+`PEERCRED_DENIED` already tells it. No case drives the order. A case reached
+`PEERCRED_DENIED` itself in the thirteenth round, and this passage had recorded
+a reason against one: that a fixture for the check would describe a server's
+policy and nothing in the protocol. That reason does not separate such a fixture
+from F1, F2 and F3, each of which describes a deployment's policy too. What
+carried the reversal is a fact the passage could not have weighed, because the
+thirteenth round found it: §7 claimed every case driven against a server is
+answerable, which is false of a server that refuses the uid the driver connects
+from, since it refuses every case alike and §2 leaves a driver unable to tell
+that from a fault. F12 is a precondition of reading the suite at all before it
+is an input to any one case. The order the check runs in still has no case.
 
 An earlier draft justified a later check by saying it lets a server compare the
 process id the kernel attests against the one the request claims. That is wrong
@@ -2885,6 +2892,14 @@ non-conforming. The decision case needs a credential the peer accepts and
 a `user` the server holds that its policy refuses, which is a property of a
 deployment rather than of this protocol. Naming what the driver must be told
 turns each from a silent assumption into an input.
+
+F12 is the same shape from the other side, and it went in during the thirteenth
+round for a reason about the suite rather than about its own case. A server
+making §5's check refuses before the version word, so it refuses every case in
+the section alike, and a driver that has not established whether its uid is
+accepted cannot read a single result. The case it also earns asserts what every
+shape of §5's answer shares, that nothing the request asked for arrives, since
+§5 leaves a refusing server its choice among them.
 
 F5 is the odd one. §2's identity check binds only a client that was configured
 with an expected identity, so the fixture supplies both halves of that
