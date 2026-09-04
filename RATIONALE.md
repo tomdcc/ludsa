@@ -3062,9 +3062,15 @@ new code into a fall-through on every deployed client, with nothing on the
 client changed and nothing to detect it. The appendix already answers a code
 that says nothing, `AUTHN_DENIED`, with the outcome that assumes least, and
 §6.2.1 puts `AUTHN_UNKNOWN` on the credential side on the same ground: a client
-that cannot read the answer has not been told the credential was good. The cost
-is that a client meeting a broken server stops its stack where it used to fall
-through, which is the direction a value it cannot read should fail in.
+that cannot read the answer has not been told the credential was good.
+`PAM_SYSTEM_ERR` denies as well, and the appendix keeps it for a client and a
+server disagreeing about the protocol itself. This client read the envelope, the
+message type and the response it expected, and only the outcome value was
+unassigned. What a later version adds to `result` is an outcome of an
+authentication attempt, so an authentication failure is the likelier report. The
+thirteenth round asked that question, which this entry had not answered. The
+cost is that a client meeting a broken server stops its stack where it used to
+fall through, which is the direction a value it cannot read should fail in.
 `STATUS_UNKNOWN` keeps the fall-through, since a status reports how a server
 handled a message rather than what it decided.
 
@@ -3127,11 +3133,16 @@ appendix chose rather than a pattern it licensed. What a deployment loses is a
 rearrangement nobody has asked for.
 
 The peer-identity outcomes are asked to move together for the same reason they
-share a default. Two of the three already do, since a socket the client cannot
-open and a peer it did not expect both report `CONNECTION_FAILED`; only
-`PEERCRED_DENIED` could drift. An administrator deciding that a peer refusal
-should stop the stack means all of it, not the half the server happened to
-detect.
+share a default. An administrator deciding that a peer refusal should stop the
+stack means all of it, not the half the server happened to detect. The tie
+reaches a `CONNECTION_FAILED` the client got by refusing the server's identity
+and stops there. The tenth round widened that name to any connection a client
+was unwilling to use, so it now also covers conditions that clear on a retry,
+and a socket that is not there yet is the ordinary startup-order case. One
+setting across the whole name would make a boot race stop a stack that an
+administrator had configured against a misconfiguration. The thirteenth round
+found that, and the reviewer who found it was reading the objection record
+rather than this file.
 
 **Why the rest is non-normative.** No mapping is right for every host.
 `pg_ludsa` has no PAM, and a client with a host that distinguishes more finely

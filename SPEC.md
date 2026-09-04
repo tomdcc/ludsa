@@ -635,9 +635,11 @@ Each enumeration names its own 1, so the name says which enumeration it belongs
 to: `STATUS_UNKNOWN` (§5), `AUTHN_UNKNOWN` (§6.2.1), `SERVING_UNKNOWN` (§6.3).
 What this section fixes is the number, because that is what travels.
 
-A sender MUST NOT emit 0 or 1. A receiver that meets either, or any other value
-it does not recognise, MUST treat it as 1, and MUST NOT treat it as an
-affirmative outcome.
+A sender MUST NOT emit 0 or 1, and MUST NOT emit a value its own version does
+not assign in that enumeration. §4.1 makes a new value a minor bump, so what a
+sender may emit is what its own version defines, and §6 binds `msg_type` the
+same way. A receiver that meets 0 or 1, or any other value it does not
+recognise, MUST treat it as 1, and MUST NOT treat it as an affirmative outcome.
 
 **No value that names a non-affirmative outcome in one enumeration is
 affirmative in another.** Holding the affirmative outcome at 2 everywhere, and
@@ -2121,8 +2123,12 @@ point returns has to be applied.
 
 `CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
 ends, a client and a server that a configuration does not permit to talk. A
-client that offers an override SHOULD apply one setting to both, so an
+client that offers an override SHOULD apply one setting to `PEERCRED_DENIED` and
+to a `CONNECTION_FAILED` it reached by refusing the server's identity, so an
 administrator who changes how a peer refusal behaves changes all of it.
+`CONNECTION_FAILED` also covers conditions that clear on a retry, such as a
+socket that is not there yet, and an override keyed on a peer refusal does not
+reach those.
 
 The response codes §7 gives a client:
 
@@ -2173,8 +2179,14 @@ the credential side for that reason, so it takes the code every other credential
 outcome takes. Waiting does not change it: §3.4 has a receiver reach it for a
 value a later minor version assigns, and §4.1 permits that addition, so a server
 upgrade would otherwise turn a denial every deployed client used to stop on into
-one they fall through. `STATUS_UNKNOWN` keeps `PAM_AUTHINFO_UNAVAIL` because it
-is not a decision at all: an `ERROR` message says the server decided nothing.
+one they fall through. `PAM_SYSTEM_ERR` would stop the stack too, and the
+appendix gives it where a client and a server disagree about the protocol
+itself. Here the client read the envelope, the message type and the response it
+expected, and only the outcome value was unassigned. §4.1 lets a later minor
+version add to `result`, and what it adds is the outcome of an authentication
+attempt, so an authentication failure is the likelier report. `STATUS_UNKNOWN`
+keeps `PAM_AUTHINFO_UNAVAIL` because it is not a decision at all: an `ERROR`
+message says the server decided nothing.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.
