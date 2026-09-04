@@ -2427,6 +2427,23 @@ to the size plus a decode step in the very component this design keeps minimal.
 It is `bytes` rather than a string because the protocol is generic: another
 backend may carry a password, or something that is not text at all.
 
+**Why a sender is bound to its own schema, and not only to its own tags.** The
+thirteenth round bound a sender to the enumerated values its version assigns. It
+said §6 did the same for `msg_type`. §6 said nothing of the kind. It assigns the
+values, it tells a receiver what to do with one it does not accept, and it
+leaves a client free to put a response type in a request.
+
+The type rules had the same gap. §3.3 bound a receiver to reject a value its
+type forbids, and bound a client not to connect with one. It never bound a
+sender, and §5 and §7 both rested on a server being bound. `MAX_LENGTH` was the
+third. §3 addressed every sentence about it to a receiver, and §5 told a client
+reading `REQUEST_TOO_LARGE` that its peer had sent something §3 forbade.
+
+The three now sit in §3.2, beside the tag rules, which is where a sender's
+obligations already were. Stating them in one list is what stops the next
+version of this gap. A rule written for a receiver reads as complete until
+somebody looks for its other half.
+
 **Why the rule is general, and why `credential` still names it.** §3.2 binds
 every sender to carry a value as the octets it was given, so the obligation
 reaches `user`, `service`, `rhost`, `ruser` and `tty` as well. Stating it once

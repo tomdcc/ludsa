@@ -235,13 +235,16 @@ reads the other's.
 
 A client or server MUST establish that its path is representable in full in the
 platform's socket address before it binds or connects, and MUST NOT truncate it
-to fit. Neither call reports the condition afterwards: a truncated path either
-names nothing or names a different socket, and both are indistinguishable from a
-correct one. A server whose path does not fit MUST fail to start. A client whose
-path does not fit MUST NOT connect, and reports the condition §7 names
-`CONNECTION_FAILED`. Each SHOULD name the maximum its platform allows in the
-diagnostic it emits, since that is what makes the failure actionable and neither
-side can learn it from the other.
+to fit. A path is representable in full where the address structure holds it
+with room for a terminator, so the usable length is one less than the array, and
+neither side may rely on a platform accepting a path that fills it. Neither call
+reports the condition afterwards: a truncated path either names nothing or names
+a different socket, and both are indistinguishable from a correct one. A server
+whose path does not fit MUST fail to start. A client whose path does not fit
+MUST NOT connect, and reports the condition §7 names `CONNECTION_FAILED`. Each
+SHOULD name the maximum its platform allows in the diagnostic it emits, since
+that is what makes the failure actionable and neither side can learn it from the
+other.
 
 A server MUST refuse to start if the configured path exists
 and is not a socket, and MUST apply that test before it removes or replaces
@@ -487,6 +490,9 @@ When it emits a message, a client or server MUST:
 - Omit an optional field that has no value.
 - Emit no tag its own version does not define for that message type.
 - Emit a value it is passing on as the octets it was given.
+- Emit a `msg_type` its own version assigns, and a request type in a request.
+- Emit a value its field's type permits.
+- Declare no `length` greater than `MAX_LENGTH`.
 
 Ascending order binds every message, so a receiver checks it against the tag
 before it without knowing which schema applies. Whether a repeat is legal does
@@ -542,10 +548,11 @@ from 1.
 | `utf8` | `0x3` | dynamic | MUST NOT contain a NUL octet; MUST be valid UTF-8 |
 | `bytes` | `0x4` | dynamic | none |
 
-A client asked to send a value its field's type does not permit MUST NOT open a
-connection to send it, and reports the condition §7 names `INVALID_REQUEST` to
-its host application. §3.1 says the same for a value above its maximum. Neither
-lets a client alter the value to make it sendable (§3.2).
+A sender MUST NOT emit a value its field's type does not permit (§3.2). A client
+asked to send one MUST NOT open a connection to send it, and reports the
+condition §7 names `INVALID_REQUEST` to its host application. §3.1 says the same
+for a value above its maximum. Neither lets a client alter the value to make it
+sendable (§3.2).
 
 **A tag's shape is checked before its identity.** A receiver MUST reject a tag
 as `REQUEST_MALFORMED` on any of these grounds, whether or not it recognises
@@ -638,9 +645,10 @@ What this section fixes is the number, because that is what travels.
 
 A sender MUST NOT emit 0 or 1, and MUST NOT emit a value its own version does
 not assign in that enumeration. §4.1 makes a new value a minor bump, so what a
-sender may emit is what its own version defines, and §6 binds `msg_type` the
-same way. A receiver that meets 0 or 1, or any other value it does not
-recognise, MUST treat it as 1, and MUST NOT treat it as an affirmative outcome.
+sender may emit is what its own version defines. §3.2 binds `msg_type` and a
+field's type on the same terms. A receiver that meets 0 or 1, or any other value
+it does not recognise, MUST treat it as 1, and MUST NOT treat it as an
+affirmative outcome.
 
 **No value that names a non-affirmative outcome in one enumeration is
 affirmative in another.** Holding the affirmative outcome at 2 everywhere, and
@@ -975,11 +983,12 @@ The third reads a version to choose an encoding and for nothing else. A version
 this server does not implement, and an interval that expires with none read, are
 both answered `PEERCRED_DENIED` in the server's own major version. Nothing
 displaces it, because the refusal was settled before any other answer could
-arise and nothing the peer sends can change it. `VERSION_UNSUPPORTED` and
-`REQUEST_TIMEOUT` describe what the peer did afterwards. The `RATE_LIMITED` §2
-gives a server at its concurrency bound is reached at accept alongside this
-check, and it would tell a peer that a later attempt may fare better, which is
-never true of a refusal on identity.
+arise and nothing the peer sends can change it. A server refusing on this check
+and at its concurrency bound together answers `PEERCRED_DENIED`.
+`VERSION_UNSUPPORTED` and `REQUEST_TIMEOUT` describe what the peer did
+afterwards. The `RATE_LIMITED` §2 gives a server at its concurrency bound is
+reached at accept alongside this check, and it would tell a peer that a later
+attempt may fare better, which is never true of a refusal on identity.
 
 Such a server owes no drain and MAY read and discard, on §3's terms. It parses
 nothing beyond `ludsa_version_major`, and holds no length it may rely on, so
@@ -1058,11 +1067,12 @@ no length. Terminating it first substitutes a shorter value and checks that,
 which a NUL makes silent: two identities differing only past the NUL arrive as
 one.
 
-A server is bound to emit none of those faults. §5 forbids the control character
-and the encoding, §3.1 bounds the length, and §3.3 forbids the NUL. So a client
-meeting one has found a bug in the server rather than a value to work around,
-and reporting it is what gets the bug fixed. More tolerant handling is a
-client's own choice, and this document does not specify it.
+A server is bound to emit none of those faults. §5 forbids the control
+character, §3.1 bounds the length, and §3.3 forbids the NUL and the encoding,
+which §3.2 binds a sender to. So a client meeting one has found a bug in the
+server rather than a value to work around, and reporting it is what gets the bug
+fixed. More tolerant handling is a client's own choice, and this document does
+not specify it.
 
 Tolerance has one bound. A client MAY render a defective value in a transformed
 form to log it or report it, since a fault nobody can describe is a fault nobody
