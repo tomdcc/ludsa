@@ -2191,15 +2191,6 @@ guarantee stopped over-promising, and a MUST was added forbidding a receiver to
 use the value as a format string, a template, or anything else that interprets
 its content.
 
-The thirteenth round added where the checks run. A C receiver stores the value
-before it inspects it, and the store it reaches for is a NUL-terminated buffer.
-The checks then run over a shorter value than the one that arrived, and pass
-honestly. §5's tolerance bound already names the failure that produces, two
-identities differing only in the defective octets arriving as one, and a NUL
-reaches it with no substitution at all. Binding the checks to the extent the
-field declared is what closes it, and it is the same sentence §6.2 spends on
-`credential` for the same reason.
-
 **The eighth round took the MUST back out.** A rule about what a receiver hands
 a value to is not observable on the wire, no conformance case can reach it, and
 it is a property of untrusted input in general rather than of these fields.
@@ -2224,6 +2215,15 @@ line misleads whoever reads it. A format string in a module loaded into an
 compromised server into code execution. Of the three, `authn_id` reaches
 furthest: `error_detail` arrives only in an `ERROR`, and the identity is logged
 when everything went right.
+
+**Why the checks are bound to the field's declared extent.** A C receiver stores
+the value before it inspects it, and the store it reaches for is a
+NUL-terminated buffer. The checks then run over a shorter value than the one
+that arrived, and pass honestly. §5's tolerance bound already names the failure
+that produces, two identities differing only in the defective octets arriving as
+one, and a NUL reaches it with no substitution at all. Binding the checks to the
+extent the field declared is what closes it, and it is the same sentence §6.2
+spends on `credential` for the same reason.
 
 **What was declined with it.** The same round proposed banning U+2028, U+2029
 and the bidirectional overrides. Neither earns a place in the banned set. U+2028
@@ -2310,11 +2310,12 @@ because `AUTHN_DENIED_USER_UNKNOWN` discloses that much, and there the
 disclosure is bounded: a caller reaches it by sending a credential under a
 `service` the server recognises. A credential-free query removes the bound and
 the choice together, and leaves an enumeration oracle gated by nothing but the
-socket's permissions. STATUS and PING each carry no credential, and what STATUS
-reports is the server's own health rather than which principals it holds. So a
-later version weighing this is trading user enumeration for the ability to
-decline in stacks this protocol was not built to serve, and the second is worth
-having only where someone wants a LUDSA principal to log in by SSH key.
+socket's permissions. STATUS and PING each carry no credential, and neither
+answers which principals a server holds: STATUS reports the server's own health,
+and PING reports that the server is there. So a later version weighing this is
+trading user enumeration for the ability to decline in stacks this protocol was
+not built to serve, and the second is worth having only where someone wants a
+LUDSA principal to log in by SSH key.
 
 ### 6.1 PING
 
@@ -2450,8 +2451,7 @@ module ever sees it, a value of the same length filled with a repeating pattern
 of control characters, so that a caller cannot tell an unknown name from a wrong
 password by timing. A codec that checked `credential` for printable text would
 pass every PostgreSQL test and reject the ordinary failure path of the other
-host the library is meant to sit in. Measured 2026-09-04, and recorded under
-R13-1.
+host the library is meant to sit in. Measured 2026-09-04.
 
 **Why no party may normalise the credential.** A signature covers exact bytes,
 so any change breaks verification. The worse failure is asymmetric. A client
@@ -3088,7 +3088,9 @@ it to report for a fault it found itself, and no client-local name either. §5's
 prohibition was always about a fault the client found, and a status a server
 emitted is that server's statement about a request the client did send. The list
 became the property, which is what the closed list should have been from the
-start.
+start. The property carries two routes, since a status a client does not
+recognise reaches it under no name the server sent: it relays what it read, or
+records `STATUS_UNKNOWN` for a value §3.4 gives it no name for.
 
 ## Appendix A: derived message maxima
 
@@ -3142,10 +3144,10 @@ client changed and nothing to detect it. The appendix already answers a code
 that says nothing, `AUTHN_DENIED`, with the outcome that assumes least, and
 §6.2.1 puts `AUTHN_UNKNOWN` on the credential side on the same ground: a client
 that cannot read the answer has not been told the credential was good.
-`PAM_SYSTEM_ERR` denies as well, and the appendix keeps it for a client and a
-server disagreeing about the protocol itself. This client read the envelope, the
-message type and the response it expected, and only the outcome value was
-unassigned. What a later version adds to `result` is an outcome of an
+`PAM_SYSTEM_ERR` denies as well, and the appendix keeps it for something that
+needs a person rather than a different credential. This client read the
+envelope, the message type and the response it expected, and only the outcome
+value was unassigned. What a later version adds to `result` is an outcome of an
 authentication attempt, so an authentication failure is the likelier report. The
 thirteenth round asked that question, which this entry had not answered. The
 cost is that a client meeting a broken server stops its stack where it used to
@@ -3221,15 +3223,18 @@ rearrangement nobody has asked for.
 
 The peer-identity outcomes are asked to move together for the same reason they
 share a default. An administrator deciding that a peer refusal should stop the
-stack means all of it, not the half the server happened to detect. The tie
-reaches a `CONNECTION_FAILED` the client got by refusing the server's identity
-and stops there. The tenth round widened that name to any connection a client
-was unwilling to use, so it now also covers conditions that clear on a retry,
-and a socket that is not there yet is the ordinary startup-order case. One
-setting across the whole name would make a boot race stop a stack that an
-administrator had configured against a misconfiguration. The thirteenth round
-found that, and the reviewer who found it was reading the objection record
-rather than this file.
+stack means every view of it a client can name, not the half the server happened
+to detect. The tie reaches a `CONNECTION_FAILED` the client got by refusing the
+server's identity and stops there. It cannot reach a server that refuses in
+silence. §5 lets one close without replying, and the client is then left with
+`RESPONSE_ABSENT`, which §2 makes indistinguishable from a server that failed,
+so the default is the only thing that governs it. The tenth round widened that
+name to any connection a client was unwilling to use, so it now also covers
+conditions that clear on a retry, and a socket that is not there yet is the
+ordinary startup-order case. One setting across the whole name would make a boot
+race stop a stack that an administrator had configured against a
+misconfiguration. The thirteenth round found that, and the reviewer who found it
+was reading the objection record rather than this file.
 
 **Why the rest is non-normative.** No mapping is right for every host.
 `pg_ludsa` has no PAM, and a client with a host that distinguishes more finely

@@ -261,6 +261,15 @@ unauthenticated CPU burn reachable without authenticating.
 The response goes out before the drain starts, so a client blocked in `read`
 gets its answer without waiting for the drain to finish.
 
+**The half-close goes between the response and the drain.** §2 orders the three:
+write the response, `CloseWrite()`, then drain, then `Close()`. A handler that
+opens with `defer c.Close()` and calls neither, or that half-closes after the
+drain loop, holds the driver on its read until the drain ends. §7's
+further-octets case asserts both halves. End of file proves the write direction
+shut, and the accepted write proves the drain was still running when it did. A
+server that defers the half-close fails the first assertion, and one that closed
+outright fails the second.
+
 **Go: `net.Listener.Accept` returns a `net.Conn`, which has no `CloseWrite`.** A
 server written against the interface reaches for `Close()` where §2 asks for a
 half-close, and fails the further-octets case: the driver's further octets then
@@ -609,6 +618,22 @@ repeat is judged against a schema, so a receiver holding none for that type has
 nothing to judge it with, which is why the pair holds however the message was
 read.
 
+**Steps 10 to 13 wait for the whole message, and a streaming parser will not.**
+§4 permits reporting a fault early, and it permits nothing else. A required
+field is missing only once the message has ended. A selector and a limit are
+legible as soon as their own field is, and the field numbers run against the
+step order: `service` is field 1 and `credential` field 2 in an
+`AUTHENTICATE_REQUEST`, and `max_age` is field 1 and `service` field 2 in a
+`STATUS_REQUEST`. So a server that validates as it reads holds a verdict it may
+not yet act on. Gate steps 10 to 13 behind a flag that says the declared octets
+are consumed, and not behind holding what the step needs.
+
+**Nothing in `testdata/` can catch this.** A vector handed to a decoder in one
+call always arrives whole, so arrival order never varies and every gated step
+fires when an ungated one would. §7's third selector case drives the `max_age`
+half against a real socket. A segmented feeder in the server tests is what
+reaches the rest.
+
 Run the schema-independent pass over the whole message first, then dispatch,
 then apply the schema. A server that dispatches on `msg_type` before checking
 tag shape or extents answers `REQUEST_UNSUPPORTED` to a message that is
@@ -771,9 +796,12 @@ neither aliases the other.
 safe.** §5 has an `ERROR` message carry no field but `status` and
 `error_detail`. A struct field no tag populated holds 0, and §3.4 leaves 0
 unassigned in every enumeration, so a receiver treats it as that enumeration's 1
-and MUST NOT read it as affirmative. A `result` no response carried is
-`AUTHN_UNKNOWN` and never `OK`, and a `serving` no response carried is
-`SERVING_UNKNOWN` and never `SERVING`.
+and MUST NOT read it as affirmative. In a message whose type defines no such
+field, a `result` no response carried is `AUTHN_UNKNOWN` and never `OK`, and a
+`serving` no response carried is `SERVING_UNKNOWN` and never `SERVING`. Where
+the type does define it, a required field the response omitted is a missing
+required field, which §7 names `RESPONSE_MALFORMED` and Appendix B maps to
+`PAM_SYSTEM_ERR`.
 
 Do not rely on that alone. It closes the enumerations, and the shared-struct
 hazard below reaches fields it does not cover.
@@ -1130,8 +1158,9 @@ Without it that denial admits the caller and nothing detects the omission.
 stand aside, and it cannot do that on its own. The `account` phase answers from
 the verdict its own `auth` phase cached, so a user it has no verdict for draws
 `PAM_SYSTEM_ERR` rather than a report that the user is not its business. That
-takes per-code control on the `account` line, and a short-circuit ahead of it
-for the users LUDSA does not serve. Neither works without the other.
+takes per-code control on the `account` line, a short-circuit ahead of it for
+the users LUDSA does not serve, and a selector on the `auth` line. Each of them
+is needed and none of them works alone.
 
 ```
 auth     [success=1 default=ignore] \
@@ -1170,9 +1199,9 @@ LUDSA answered `AUTHN_DENIED_USER_UNKNOWN` for, whose `account` verdict is
 this module, and that is what the `pam_succeed_if` line is for.
 
 The ordering inside the `account` stack is the shipped one and it matters.
-`pam_unix` runs first and is `required`, so its own expiry and aging checks run
-for every user before anything short-circuits. The selector sits after it, and
-`pam_permit` at the end is what turns a recorded success into a passing stack.
+`pam_unix` runs first, so its own expiry and aging checks run for every user
+before anything short-circuits. The selector sits after it, and `pam_permit` at
+the end is what turns a recorded success into a passing stack.
 
 **The short-circuit must select every user LUDSA does not serve and no user it
 does.** It skips the `account` line. A principal that matches it therefore
@@ -1206,15 +1235,15 @@ fails closed, and no control string fixes it without the concession above.
 carrying no credential, which version 1.0 does not define, and which would cost
 a user enumeration oracle to add.
 
-**How the module gets the credential, and what it must not do with it.**
-Neither host pre-sets `PAM_AUTHTOK`. PostgreSQL's conversation function asks its
+**How the module gets the credential, and what it must not do with it.** No host
+measured pre-sets `PAM_AUTHTOK`. PostgreSQL's conversation function asks its
 client for the password only when a module prompts, and `sshd` holds the one the
 client sent and answers each prompt from it. So a module has to run the
 conversation to get anything at all, and the call it reaches for first is the
 wrong one.
 
-`pam_get_authtok()` bundles three behaviours and only the middle one is wanted:
-it inherits an already-set `PAM_AUTHTOK`, prompts through the conversation where
+`pam_get_authtok()` bundles behaviours, and only the prompting is wanted: it
+inherits an already-set `PAM_AUTHTOK`, prompts through the conversation where
 there is none, and publishes the result back to the item. Both ends of that
 bundle are disclosures. Publishing hands the token to every later module
 configured with `try_first_pass`, which the distro profiles this stack is
@@ -1247,8 +1276,8 @@ before returning, because the host answers every prompt from the copy it holds.
 **Keep the prompt identical on both branches.** Selecting on group membership
 before prompting makes the prompt differ between a principal and a local user,
 and a remote caller then reads group membership off the prompt string. That is
-the disclosure §6 weighs when it declines a credential-free request type,
-reached without a socket and without a credential.
+the disclosure `RATIONALE.md` weighs under §6 when it declines a credential-free
+request type, reached without a socket and without a credential.
 
 **`sshd` differs from PostgreSQL in ways worth designing against.** It is the
 second host the C library is meant to sit in, and the differences are where a
@@ -1399,11 +1428,11 @@ the peer did after you had already refused it, and either would send an operator
 to the wrong configuration file. The version word chooses an encoding and
 decides nothing, which is the only reason reading it is safe.
 
-**Default to the third answer, and fall back to the first under load.** Waiting
-for `ludsa_version_major` and replying in the client's own version is what puts
-a usable diagnosis in the client's log, and reading and discarding while you do
-it keeps a client that is still writing a credential from taking `EPIPE`. Make
-that the normal path.
+**Default to waiting for the version word, and fall back to closing at once
+under load.** Waiting for `ludsa_version_major` and replying in the client's own
+version is what puts a usable diagnosis in the client's log, and reading and
+discarding while you do it keeps a client that is still writing a credential
+from taking `EPIPE`. Make that the normal path.
 
 Under load the same behaviour works against you. Every refused connection then
 costs an interval and a discard loop, and an unauthorised peer opening

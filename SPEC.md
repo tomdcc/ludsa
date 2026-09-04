@@ -65,8 +65,10 @@ The server MUST observe both of these:
 - **Reading on does not wait.** A request is delivered at its declared octets
   (below), so a server holding them does not need the half-close and does not
   defer its response. One that looks for octets beyond the declared length
-  checks what has already arrived. §3's drain is where anything later is
-  observed, and a server that reaches it has answered.
+  checks what has already arrived. Where a rejection owes a drain (§3), anything
+  later is observed there, and a server that has reached the drain has answered.
+  A server that answered the message it held owes no drain, and observes nothing
+  after its response.
 
 **A server answers once it can.** The obligation begins when it has read
 `ludsa_version_major`. That value opens every message, and until the server
@@ -565,8 +567,8 @@ would mean trusting a width the tag itself contradicts. Field number 0 is
 reserved, so no tag carrying it names a field, and rejecting it is what makes
 zero safe as the initial value of the previous-tag comparison §3.2 describes.
 Holding bits 5-4 at zero on a dynamic tag is what lets a receiver compare a tag
-as one whole 16-bit value. Only a tag that passes every one of them is compared
-against a schema.
+as one whole 16-bit value. Only a tag that passes every one of those checks is
+compared against a schema.
 
 **A tag is validated whole.** A client or server compares a received tag against
 the tags its schema defines for that message type. It MUST NOT read a value out
@@ -675,8 +677,8 @@ a field means, and a familiar tag therefore carries no guarantee about its
 meaning under a major version the receiver does not implement.
 
 A server that receives a `ludsa_version_major` it does not implement MUST reply
-`VERSION_UNSUPPORTED` (§5) in its own major version, except where §2 relieves it
-of answering at all (§2, §5).
+`VERSION_UNSUPPORTED` (§5) in its own major version, except where a refusal
+reached at accept displaces it or relieves it of answering at all (§2, §5).
 
 A client that does not implement the version that reply carries cannot read the
 status, because §3 forbids interpreting any octet past a version word it does
@@ -784,7 +786,7 @@ either. Those octets lie outside the message (§3), so the check concerns the
 connection rather than the message, and a receiver may observe them at any
 point. Where it observes them before it has written its response, §2's SHOULD
 reaches whatever outcome this order had produced, the decision included. Where
-it observes them afterwards it has already answered, and §2 has a server send
+it observes them afterwards it has already answered, and §3 has a server send
 one response to a connection.
 
 Step 4 checks only what a receiver can check without knowing which schema
@@ -924,10 +926,11 @@ a status never carries.
 Every code a server emits is its statement about the request it was sent. The
 `REQUEST_` prefix says so on the codes that name a fault in it. The unprefixed
 codes describe the server's own state or the pair's compatibility, so they carry
-no direction and a client reports them unchanged. `STATUS_UNKNOWN` belongs to
-neither family and a server never emits it: §3.4 forbids a sender from emitting
-any enumeration's 1, and it is what a client records for a status it does not
-recognise. §7 gives a client the names for what it finds in a response.
+no direction, and §7 has a client relay every status it read. `STATUS_UNKNOWN`
+belongs to neither family and a server never emits it: §3.4 forbids a sender
+from emitting any enumeration's 1, and it is what a client records for a status
+it does not recognise. §7 gives a client the names for what it finds in a
+response.
 
 A client MUST NOT report a `REQUEST_` code for a fault it found itself. The
 names exist so a caller can tell the two apart. An operator reading
@@ -935,16 +938,18 @@ names exist so a caller can tell the two apart. An operator reading
 has a peer that declared a length §3 forbids it to send. One reading §7's other
 response codes goes to the server.
 
-`REQUEST_MALFORMED` means the sender produced something §3 forbids it to send:
-invalid structure, a value its type rules reject, a field above its §3.1
-maximum, or an unrecognised tag that §3.3 and §4 have the receiver reject rather
-than skip. It also covers octets a receiver observed beyond the declared length
-(§2), which lie outside the message and are still something §3 forbids the
-sender to put on the connection. A message that stopped early is
-`REQUEST_INCOMPLETE` instead, because a peer that crashed or was killed produced
-a short message with no defect in its encoder. `REQUEST_INCOMPLETE` covers a
-message that ended before its declared length, and one that ended before it
-declared a length at all.
+`REQUEST_MALFORMED` means the sender produced something §3, §3.1, §3.2, §3.3 or
+§4 forbids it to send, other than a condition §5 gives a status of its own.
+Invalid structure, a declared length below the minimum for the version, a value
+its type rules reject, a field above its §3.1 maximum, a required field absent,
+a tag repeated where its message type permits it once, and an unrecognised tag
+that §3.3 and §4 have the receiver reject rather than skip are instances. It
+also covers octets a receiver observed beyond the declared length (§2), which
+lie outside the message and are still something §2 forbids the sender to put on
+the connection. A message that stopped early is `REQUEST_INCOMPLETE` instead,
+because a peer that crashed or was killed produced a short message with no
+defect in its encoder. `REQUEST_INCOMPLETE` covers a message that ended before
+its declared length, and one that ended before it declared a length at all.
 
 `REQUEST_TOO_LARGE` is what the envelope decides. A receiver reaches it from the
 declared length alone and answers without parsing any further, which is the
@@ -956,7 +961,7 @@ document does not require. **A server configured to check MUST do so
 immediately after it accepts the connection**, before it reads anything from it.
 
 A server whose check fails owes the peer nothing it asked for, and §2's terms
-for a refusal reached at accept govern what it may do. These are the shapes that
+for a refusal reached at accept govern what it may do. These are the shapes it
 takes:
 
 - closes the connection without replying;
@@ -1368,9 +1373,9 @@ resolves, or, where no `user` was sent, where it resolved an identity from the
 credential. §7 tests that, and Appendix B keys `PAM_USER_UNKNOWN` on it, which
 is the code an operator configures a module to stand aside on.
 
-Neither precondition asks a server to disclose anything. Every code that names a
-reason is optional and `AUTHN_DENIED` is always available, so this binds only a
-server that has chosen to name one, and says which name is true.
+None of these preconditions asks a server to disclose anything. Every code that
+names a reason is optional and `AUTHN_DENIED` is always available, so this binds
+only a server that has chosen to name one, and says which name is true.
 
 A client that sent a `user` and must answer at two separate points derives both
 from this one value. A credential outcome fails the credential step. An
@@ -1664,10 +1669,14 @@ document does not specify. A driver MUST be given all of them:
   request whose response carries `server_desc` cannot be driven that field at
   all, and §6.4 assigns it in `PING_RESPONSE` and in `STATUS_RESPONSE`.
 - **F12**: whether the peer under test makes the peer-credentials check §5
-  permits, which of §5's answers it gives where it does, and whether it accepts
-  the uid the driver connects from. §5 leaves the check to a deployment and the
-  answer to the server, so neither is derivable from the wire. The second uid
-  this needs is the one F5's case already asks for.
+  permits, which of §5's answers it gives where it does, whether it accepts the
+  uid the driver connects from for every other case in this section, and a
+  second uid it refuses, which the case below connects from. §5 leaves the check
+  to a deployment and the answer to the server, so none of them is derivable
+  from the wire. F5's case asks a driver to run as a second uid, so the
+  affordance is one a driver has already. F5 settles that uid against what the
+  client expects, and this fixture settles its own against what the server
+  refuses.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1788,9 +1797,9 @@ what every shape of that choice shares: nothing the request asked for. A driver
 that cannot connect from a refused uid cannot run it, and is not non-conforming
 for that.
 
-One further case observes a client that never connects at all, which §3.1's
-prohibition reaches and no message can. The driver listens, and hands the client
-a value its own maximum forbids:
+One further case observes a client that never connects at all, which §3.1's and
+§3.3's prohibitions reach and no message can. The driver listens, and hands the
+client a value one of them forbids:
 
 | case | against | expected | needs |
 |---|---|---|---|
@@ -1798,9 +1807,9 @@ a value its own maximum forbids:
 | A NUL octet in a value bound for a `string` field F8 reaches, handed to the client through its host interface | client | the client reports `INVALID_REQUEST`, and the driver's socket saw no connection | F8 |
 
 The report is what ends the case, so no deadline is needed: a client that
-connected before reporting has already failed it. §3.1 states the other half of
-that sentence in the indicative rather than as a MUST, so the name is a
-client-local one under this section's usual terms and the prohibition on
+connected before reporting has already failed it. §3.1 and §3.3 each state the
+other half of that sentence in the indicative rather than as a MUST, so the name
+is a client-local one under this section's usual terms and the prohibition on
 connecting is what binds. A client that omitted the field and sent the rest has
 failed it too, since the driver's socket then saw a connection.
 
@@ -2042,11 +2051,12 @@ direction and serves both sides. Where a case is marked `client`,
 the status column already holds one of these names, and the same latitude
 applies to it.
 
-A code that carries no direction serves both sides. A client reports
-`VERSION_UNSUPPORTED` for a response major version it does not implement, and
-relays every status it read under the name the server sent it. §5's prohibition
-reaches a code a client would report for a fault it found itself, and a status a
-server emitted is that server's statement about a request the client did send.
+A client reports `VERSION_UNSUPPORTED` for a response major version it does not
+implement, and relays every status it read: under the name the server sent it,
+or as `STATUS_UNKNOWN` (§3.4, §5) where it does not recognise the value. §5's
+prohibition reaches a code a client would report for a fault it found itself,
+and a status a server emitted is that server's statement about a request the
+client did send.
 
 How much had arrived when the wait ended decides which of the three a client
 reports. Where the server's side ended it, a client that read no octet reports
@@ -2157,14 +2167,16 @@ That cell admits nobody by itself, because the same outcome denies at
 is the one place where the test of what a stack does rather than what an entry
 point returns has to be applied.
 
-`CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
-ends, a client and a server that a configuration does not permit to talk. A
-client that offers an override SHOULD apply one setting to `PEERCRED_DENIED` and
-to a `CONNECTION_FAILED` it reached by refusing the server's identity, so an
-administrator who changes how a peer refusal behaves changes all of it.
-`CONNECTION_FAILED` also covers conditions that clear on a retry, such as a
-socket that is not there yet, and an override keyed on a peer refusal does not
-reach those.
+`PEERCRED_DENIED`, and a `CONNECTION_FAILED` a client reached by refusing the
+server's identity, describe one condition from opposite ends: a client and a
+server that a configuration does not permit to talk. A client that offers an
+override SHOULD apply one setting across them, so an administrator who changes
+how a peer refusal behaves changes every view of it a client can name. A server
+that refuses in silence (§5) leaves the client `RESPONSE_ABSENT`, which §2 makes
+indistinguishable from a server that failed, so no override reaches that shape
+and the default is what it gets. `CONNECTION_FAILED` also covers conditions that
+clear on a retry, such as a socket that is not there yet, and an override keyed
+on a peer refusal does not reach those.
 
 The response codes §7 gives a client:
 
@@ -2216,24 +2228,24 @@ outcome takes. Waiting does not change it: §3.4 has a receiver reach it for a
 value a later minor version assigns, and §4.1 permits that addition, so a server
 upgrade would otherwise turn a denial every deployed client used to stop on into
 one they fall through. `PAM_SYSTEM_ERR` would stop the stack too, and the
-appendix gives it where a client and a server disagree about the protocol
-itself. Here the client read the envelope, the message type and the response it
-expected, and only the outcome value was unassigned. §4.1 lets a later minor
-version add to `result`, and what it adds is the outcome of an authentication
-attempt, so an authentication failure is the likelier report. `STATUS_UNKNOWN`
-keeps `PAM_AUTHINFO_UNAVAIL` because it is not a decision at all: an `ERROR`
-message says the server decided nothing.
+appendix gives it where something needs a person. Here the client read the
+envelope, the message type and the response it expected, and only the outcome
+value was unassigned. §4.1 lets a later minor version add to `result`, and what
+it adds is the outcome of an authentication attempt, so an authentication
+failure is the likelier report. `STATUS_UNKNOWN` keeps `PAM_AUTHINFO_UNAVAIL`
+because it is not a decision at all: an `ERROR` message says the server decided
+nothing.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.
-Where the request carried no `user`, the verdict it holds is one obtained in the
-same transaction for the identity it established under §6.2.
-Where it holds none it MUST NOT return `PAM_SUCCESS` or `PAM_IGNORE`, and SHOULD
-return `PAM_SYSTEM_ERR`: a stack that reaches this module's `account` phase
-without its `auth` phase having run, or with `PAM_USER` changed between the two,
-is a configuration that needs a person. A deployment MAY override that code on
-the terms above, and the bound above still holds, so no override turns the
-absence of a verdict into an admission.
+Where the request carried no `user`, it MUST instead hold one obtained in the
+same transaction for the identity it established under §6.2. Where it holds none
+it MUST NOT return `PAM_SUCCESS` or `PAM_IGNORE`, and SHOULD return
+`PAM_SYSTEM_ERR`: a stack that reaches this module's `account` phase without its
+`auth` phase having run, or with `PAM_USER` changed between the two, is a
+configuration that needs a person. A deployment MAY override that code on the
+terms above, and the bound above still holds, so no override turns the absence
+of a verdict into an admission.
 
 The emphasised cell is the appendix's one fail-open hazard, and the paragraphs
 below are about it.
