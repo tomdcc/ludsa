@@ -90,7 +90,7 @@ unimplemented and the server parses a truncated buffer.
 obligation to answer at `ludsa_version_major`, so:
 
 ```
-either error reading ludsa_version_major  no version to answer in, close quietly
+either error reading ludsa_version_major  no obligation yet (§2), close quietly
 io.EOF from any later read                REQUEST_INCOMPLETE (§7 case 15)
 io.ErrUnexpectedEOF from any later read   REQUEST_INCOMPLETE
 ```
@@ -265,9 +265,10 @@ gets its answer without waiting for the drain to finish.
 
 **Go: `net.Listener.Accept` returns a `net.Conn`, which has no `CloseWrite`.** A
 server written against the interface reaches for `Close()` where §2 asks for a
-half-close, and fails the further-octets case, since the driver never sees end
-of file before its write. Accept with `(*net.UnixListener).AcceptUnix`, or
-assert `*net.UnixConn`.
+half-close, and fails the further-octets case: the driver's further octets then
+draw `EPIPE` where the case asserts they are accepted, which is the assertion
+separating a half-close from a close (§7). Accept with
+`(*net.UnixListener).AcceptUnix`, or assert `*net.UnixConn`.
 
 **The sketch above never consults the declared length, and that is fine.** §3
 makes it a permission to stop early rather than one of the drain's terminators,
@@ -1015,10 +1016,11 @@ message. §3 fixes the first, so the concurrency limit is the only one such a
 server sets.
 
 Nothing requires holding a message whole. §3 forbids allocating from a declared
-length before it is checked, and forbids allocating for the body of a message
-being rejected at all, so a server that validates as it reads and discards on
-the drain path holds a field at a time rather than 32768 octets. Its budget is
-its own to work out, and it is far below the product above.
+length before it is checked, and forbids a server rejecting a message from
+allocating storage to hold what it discards, so a server that validates as it
+reads and discards on the drain path holds a field at a time rather than 32768
+octets. Its budget is its own to work out, and it is far below the product
+above.
 
 ## Mapping to PAM
 
@@ -1287,15 +1289,17 @@ deployments, and §5 gives it a status to report the refusal with.
 is readable there and costs nothing to keep, so nothing is gained by waiting and
 a server that waits has parsed octets from a peer it could already have refused.
 
-**Then choose one of three answers, and the choice is about diagnosis rather
+**Then choose how much to disclose, and the choice is about diagnosis rather
 than about correctness.** Close without replying, which leaks nothing and costs
 the client its diagnosis. Answer `PEERCRED_DENIED` at once in your own major
 version, which costs nothing and reaches a client configured for that version.
 Or wait a bounded interval for `ludsa_version_major` and answer in the version
 the client declared, which reaches its logs whatever version it speaks and holds
-a connection open for a peer you have already refused. Appendix B maps the
-status to `PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode draws, so
-the stack falls through and the log carries the diagnosis.
+a connection open for a peer you have already refused. That wait may also end in
+a close, which §2 lets any refusal reached at accept do, and which buys the
+discard over the diagnosis. Appendix B maps the status to
+`PAM_AUTHINFO_UNAVAIL`, the same code a wrong socket mode draws, so the stack
+falls through and the log carries the diagnosis.
 
 **Whatever arrives on that interval, the answer is `PEERCRED_DENIED`.** A
 version you do not implement is not `VERSION_UNSUPPORTED` here, and an interval

@@ -172,8 +172,8 @@ records, and the round-ten case that expected `RESPONSE_TIMEOUT` for a complete
 response held open inverted rather than died: it now expects the `result`, and
 fails a client that waits for the end. The platform behaviour went to the
 guidance, where it belongs, and its normative traces are §2's clause on the form
-a close is reported in, and `RESPONSE_INCOMPLETE` and §3's drain terminator
-naming an error alongside end of file.
+a close is reported in, and `RESPONSE_INCOMPLETE` and §3's drain terminator each
+naming, alongside end of file, an error that ends the read.
 
 **Why reading on for excess octets is bounded, and what its expiry produces.**
 The eleventh round left a server that holds a complete request and reads on for
@@ -339,7 +339,7 @@ The twelfth round found the prose reading as though the two producers were the
 whole of it, against a definition covering any limit a server sets on itself. A
 server budgeting backend calls and declining an AUTHENTICATE on that budget is a
 third, and it had `RATE_LIMITED` under the table and `UNAVAILABLE` under the
-prose. The prose now names the property and gives the two as instances.
+prose. The prose now names the property and gives its producers as instances.
 
 **Why the retry rule states a property rather than a list.** An enumeration goes
 stale against conditions the protocol itself produces. §2 advises a server at
@@ -2267,12 +2267,11 @@ because `AUTHN_DENIED_USER_UNKNOWN` discloses that much, and there the
 disclosure is bounded: a caller reaches it by sending a credential under a
 `service` the server recognises. A credential-free query removes the bound and
 the choice together, and leaves an enumeration oracle gated by nothing but the
-socket's permissions. STATUS is the precedent for a request carrying no
-credential, and what it reports is the server's own health rather than which
-principals it holds. So a later version weighing this is trading user
-enumeration for the ability to decline in stacks this protocol was not built to
-serve, and the second is worth having only where someone wants a LUDSA principal
-to log in by SSH key.
+socket's permissions. STATUS and PING each carry no credential, and what STATUS
+reports is the server's own health rather than which principals it holds. So a
+later version weighing this is trading user enumeration for the ability to
+decline in stacks this protocol was not built to serve, and the second is worth
+having only where someone wants a LUDSA principal to log in by SSH key.
 
 ### 6.1 PING
 
@@ -2963,13 +2962,14 @@ refuses it.
 
 **Why the over-long identity case sends no `user`.** The case was written
 without saying, and the only `user` F3 supplies is one the policy refuses, so a
-server would deny and carry no `authn_id` at all: §6.2 makes a denial with no
-identity the field meaning what it says, and no `INTERNAL_ERROR` arises. The
-case would have failed a conforming server. With no `user`, and F3 supplying a
-credential the server would answer `OK` to without one, the identity's length is
-the only thing between the server and an `OK` carrying the field. F3 also had to
-say whether the server is configured to supply `authn_id`, since one that is not
-answers the same `OK` with no field and is conforming.
+server would deny, and §6.2's comparison runs within one `result`, which lets a
+conforming server carry `authn_id` on an `OK` and not on a denial. It then has
+no value to carry and no `INTERNAL_ERROR` arises. The case would have failed a
+conforming server. With no `user`, and F3 supplying a credential the server
+would answer `OK` to without one, the identity's length is the only thing
+between the server and an `OK` carrying the field. F3 also had to say whether
+the server is configured to supply `authn_id`, since one that is not answers the
+same `OK` with no field and is conforming.
 
 **Why the empty `user` case needs the fixture to say so.** An absent `user` asks
 the server not to decide. It does not bind the exchange to an empty or null

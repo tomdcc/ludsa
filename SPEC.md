@@ -565,14 +565,15 @@ A tag that cannot describe a field is not a field to skip, and skipping one
 would mean trusting a width the tag itself contradicts. Field number 0 is
 reserved, so no tag carrying it names a field, and rejecting it is what makes
 zero safe as the initial value of the previous-tag comparison §3.2 describes.
-Holding bits 5-4 at zero on a dynamic tag is what lets a receiver compare a
-tag as one whole 16-bit value. Only a tag that passes all three is compared
+Holding bits 5-4 at zero on a dynamic tag is what lets a receiver compare a tag
+as one whole 16-bit value. Only a tag that passes every one of them is compared
 against a schema.
 
 **A tag is validated whole.** A client or server compares a received tag against
 the tags its schema defines for that message type. It MUST NOT read a value out
 of a field according to the type the tag claims when the tag as a whole is one
-it does not recognise. The width is what it skips by.
+it does not recognise. How far it skips is what the skip rule below states: bit
+6, and bits 5-4 where bit 6 is clear.
 
 **A message type's ceiling** is the highest field number the receiver's own
 version assigns in that message type. Where its version assigns no field there,
@@ -673,8 +674,8 @@ a field means, and a familiar tag therefore carries no guarantee about its
 meaning under a major version the receiver does not implement.
 
 A server that receives a `ludsa_version_major` it does not implement MUST reply
-`VERSION_UNSUPPORTED` (§5) in its own major version, unless a refusal reached at
-accept displaces it (§2, §5).
+`VERSION_UNSUPPORTED` (§5) in its own major version, except where §2 relieves it
+of answering at all (§2, §5).
 
 A client that does not implement the version that reply carries cannot read the
 status, because §3 forbids interpreting any octet past a version word it does
@@ -936,10 +937,13 @@ response codes goes to the server.
 `REQUEST_MALFORMED` means the sender produced something §3 forbids it to send:
 invalid structure, a value its type rules reject, a field above its §3.1
 maximum, or an unrecognised tag that §3.3 and §4 have the receiver reject rather
-than skip. A message that stopped early is `REQUEST_INCOMPLETE` instead, because
-a peer that crashed or was killed produced a short message with no defect in its
-encoder. `REQUEST_INCOMPLETE` covers a message that ended before its declared
-length, and one that ended before it declared a length at all.
+than skip. It also covers octets a receiver observed beyond the declared length
+(§2), which lie outside the message and are still something §3 forbids the
+sender to put on the connection. A message that stopped early is
+`REQUEST_INCOMPLETE` instead, because a peer that crashed or was killed produced
+a short message with no defect in its encoder. `REQUEST_INCOMPLETE` covers a
+message that ended before its declared length, and one that ended before it
+declared a length at all.
 
 `REQUEST_TOO_LARGE` is what the envelope decides. A receiver reaches it from the
 declared length alone and answers without parsing any further, which is the
@@ -950,7 +954,9 @@ because a receiver finds one only inside a body it has already accepted.
 document does not require. **A server configured to check MUST do so
 immediately after it accepts the connection**, before it reads anything from it.
 
-A server whose check fails does one of these:
+A server whose check fails owes the peer nothing it asked for, and §2's terms
+for a refusal reached at accept govern what it may do. These are the shapes that
+takes:
 
 - closes the connection without replying;
 - answers `PEERCRED_DENIED` at once in its own major version, having read
@@ -1635,8 +1641,8 @@ document does not specify. A driver MUST be given all of them:
   particular request type, and §5 relieves a client of checking a value it does
   not use, so neither is derivable from the wire. For a client this also settles
   which response types a driver can put in front of it: one that sends no
-  `PING_REQUEST` never receives a `PING_RESPONSE`, so `server_desc` cannot be
-  driven at it at all.
+  request whose response carries `server_desc` cannot be driven that field at
+  all, and §6.4 assigns it in `PING_RESPONSE` and in `STATUS_RESPONSE`.
 
 One further case is a decision rather than a rejection, and a driver exercises
 it too. It is the only test of §6.2's binding rule, which no wire-level input
@@ -1980,7 +1986,7 @@ still conforming:
 | `RESPONSE_MALFORMED` | the response was structurally wrong, or a field in it was defective or above its §3.1 maximum |
 | `RESPONSE_TOO_LARGE` | the response declared a length above `MAX_LENGTH` |
 | `RESPONSE_UNSUPPORTED` | the response carried a `msg_type` the client does not implement |
-| `RESPONSE_INCOMPLETE` | the server's side ended, by end of file or an error, before the declared octets had arrived |
+| `RESPONSE_INCOMPLETE` | the server's side ended before the declared octets had arrived, or before it declared a length at all, by end of file or an error that ends the read. An interrupted or would-block read is neither |
 | `RESPONSE_ABSENT` | the server's side ended with no response octet sent |
 | `RESPONSE_TIMEOUT` | the client's deadline expired before the declared octets had arrived |
 | `CONNECTION_FAILED` | the client never established a connection it was willing to use |
@@ -1994,7 +2000,8 @@ to describe.
 
 The table above binds a client by its conditions, not by these names. Where it
 gives a status for a case marked `either`, a client detects the same condition
-and reports the response name beside it here. Where a case is marked `client`,
+and reports the response name beside it here, except where the status carries no
+direction and serves both sides. Where a case is marked `client`,
 the status column already holds one of these names, and the same latitude
 applies to it.
 
@@ -2104,13 +2111,13 @@ These are defaults, not requirements. A client MAY let a deployment override the
 code it returns for an outcome, and one that does SHOULD keep these as its
 defaults, so two clients behave alike where nobody has configured otherwise. A
 client MUST NOT let an override admit a caller on a `result` other than `OK`, or
-turn any failure into an admission. It MUST NOT let one return `PAM_SUCCESS`
-from an entry point where the table above does not, so the deferral this
-appendix makes for `AUTHN_DENIED_POLICY` stays the appendix's own. That cell
-admits nobody by itself, because the same outcome denies at `pam_sm_acct_mgmt`
-and the rule below binds a client that relies on it, and it is the one place
-where the test of what a stack does rather than what an entry point returns has
-to be applied.
+turn any failure into an admission. It MUST NOT let one return `PAM_SUCCESS` or
+`PAM_IGNORE` from an entry point where the result table below does not, so the
+deferral this appendix makes for `AUTHN_DENIED_POLICY` stays the appendix's own.
+That cell admits nobody by itself, because the same outcome denies at
+`pam_sm_acct_mgmt` and the rule below binds a client that relies on it, and it
+is the one place where the test of what a stack does rather than what an entry
+point returns has to be applied.
 
 `CONNECTION_FAILED` and `PEERCRED_DENIED` describe one condition from opposite
 ends, a client and a server that a configuration does not permit to talk. A
