@@ -89,6 +89,17 @@ authorises the condition: §2, §3 and §5 each let a server close a connection 
 client is still writing to, so the write failing is a conforming exchange rather
 than a fault.
 
+**The fourteenth round tested that boundary against §2's deadlines and the rule
+stayed where it is.** §2 lets a server take as long as it likes reaching a
+decision, so the boundary reaches the deadline as well as the write, and in C
+the textbook way to bound a blocking call is `alarm()` with a `SIGALRM`
+disposition, which cancels the alarm `sshd` arms for its login grace period.
+What separates it from the write is that no conforming peer creates the
+condition: a client applies a deadline because §2 tells it to, and it chooses
+how. Nothing on the wire distinguishes `alarm()` from a `poll()` loop, and F7
+cannot, since both report the same outcome. So the hazard is real and it belongs
+in the guidance, which now names it.
+
 That also answers the objection that would otherwise sink it, which is the one
 that removed the format-string MUST: naming one condition implies the rest are
 safe. The rest are not conforming exchanges. No conforming server sends a
@@ -1768,6 +1779,18 @@ Note this means the required and optional rule is what makes the model safe, not
 the version number. A required field shipped in a minor bump by mistake is still
 rejected, so the mistake can't fail open.
 
+**Why a later version may not spend the headroom past `MAX_LENGTH`.** §4.1
+freezes the constant and every field maximum, and permits optional additions
+without saying what bounds their total. Under 1.0 the largest AUTHENTICATE
+request is 17520 octets against 32768, and that headroom is what the additions
+spend. Nothing said they had to stop.
+
+A version that overspent would define a message legal under its own schema and
+rejected by every conforming receiver. That includes one implementing the same
+version, so it is a version that cannot talk to itself. Both spec reviewers
+reached this in the fourteenth round. It is cheap now and impossible after the
+freeze.
+
 ## 5. The ERROR message
 
 **Why a status is a message type rather than a header word.** §3 covers why a
@@ -2730,6 +2753,25 @@ Field numbers are unassigned rather than reserved, because an unassigned
 required tag is already safe by construction. A peer meeting one rejects the
 message, which is the fail-closed default the rule exists to give.
 
+**Why `AUTHN_DENIED_CREDENTIAL` carries a precondition too.** §6.2.1 bound the
+policy code and the unknown-user code and left the credential code free. A
+server that had established the credential was valid could still name it. The
+same policy denial then failed the `auth` phase against one conforming server
+and passed it against another, which is the defect §6.2.1 exists to close, in
+the safe direction. What it costs an operator is a reissued credential that was
+never the fault. Every code naming a reason stays optional and `AUTHN_DENIED` is
+always available, so the rule binds only a server that chose to name one.
+
+**Why a server matches `service` by octets.** §3.2 binds a sender to carry the
+value as it was given, and the receiver's half was never stated. §6.2 states it
+for `user`, where the name goes to a policy and what that policy does with it is
+the deployment's decision. `service` is different because it selects which
+policy runs. A server comparing with `strings.EqualFold` routes a name to a
+policy that a server comparing octets answers `SERVICE_UNSUPPORTED` for. Both
+are self-consistent and both pass their own tests. F1 supplies the recognised
+and unrecognised names as opaque strings, so the conformance matrix cannot see
+the difference either.
+
 ## 7. Conformance
 
 **Why vectors are hand-authored.** Generating `testdata/` from an
@@ -3242,16 +3284,19 @@ The peer-identity outcomes are asked to move together for the same reason they
 share a default. An administrator deciding that a peer refusal should stop the
 stack means every view of it a client can name, not the half the server happened
 to detect. The tie reaches a `CONNECTION_FAILED` the client got by refusing the
-server's identity and stops there. It cannot reach a server that refuses in
-silence. §5 lets one close without replying, and the client is then left with
-`RESPONSE_ABSENT`, which §2 makes indistinguishable from a server that failed,
-so the default is the only thing that governs it. The tenth round widened that
-name to any connection a client was unwilling to use, so it now also covers
-conditions that clear on a retry, and a socket that is not there yet is the
-ordinary startup-order case. One setting across the whole name would make a boot
-race stop a stack that an administrator had configured against a
-misconfiguration. The thirteenth round found that, and the reviewer who found it
-was reading the objection record rather than this file.
+server's identity or by being refused the socket, and stops there. Both are
+permanent until somebody edits a configuration, which is the property the tie
+turns on, and the fourteenth round widened it to the second after finding this
+entry still counting three positions where Appendix B named two. It cannot reach
+a server that refuses in silence. §5 lets one close without replying, and the
+client is then left with `RESPONSE_ABSENT`, which §2 makes indistinguishable
+from a server that failed, so the default is the only thing that governs it. The
+tenth round widened that name to any connection a client was unwilling to use,
+so it now also covers conditions that clear on a retry, and a socket that is not
+there yet is the ordinary startup-order case. One setting across the whole name
+would make a boot race stop a stack that an administrator had configured against
+a misconfiguration. The thirteenth round found that, and the reviewer who found
+it was reading the objection record rather than this file.
 
 **Why the rest is non-normative.** No mapping is right for every host.
 `pg_ludsa` has no PAM, and a client with a host that distinguishes more finely

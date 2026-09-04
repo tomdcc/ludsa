@@ -109,7 +109,9 @@ MUST do so whether or not §3 owes a drain. Where it owes one it completes the
 drain after that, with its read direction still open, and closes when the drain
 ends. A server owing no drain MAY close outright instead, which ends both
 directions at once. There is no connection reuse, so a client that reads on for
-end of file never blocks on a draining server.
+end of file never blocks on a draining server. It MUST NOT require end of file
+to complete an exchange whose declared octets it already holds, since a server
+closing with octets still unread may end that read in an error instead (§7).
 
 **A message is delivered at its declared octets.** A receiver holding every
 octet the envelope declared holds the message. Nothing that happens on the
@@ -872,6 +874,13 @@ which number changes, and what a peer that predates the addition does with it:
 | a new value in the **type** table | minor | skips an optional field using it (§3.3) |
 | a **required** field | major | answers `VERSION_UNSUPPORTED` (§4) |
 
+A later version MUST NOT assign a field that takes a message type's derived
+maximum (Appendix A) above `MAX_LENGTH`. `MAX_LENGTH` is frozen and every field
+maximum is frozen, so each message type's headroom is fixed at 1.0 and an
+addition spends it. Without this a version could define a message legal under
+its own schema that every conforming receiver, one implementing that version
+included, MUST reject as `REQUEST_TOO_LARGE` (§3).
+
 A new optional field MAY be repeatable from the version that assigns it. A peer
 that predates it does not recognise the tag, so it skips each occurrence (§3.3)
 rather than adjudicating a repeat it has no schema for. What it may not do is
@@ -1247,7 +1256,12 @@ its own does not discharge it.
 `service` states which policy applies. The remote party does not influence it,
 so a server MAY route on it. A server that does not recognise a `service` it was
 sent MUST answer `SERVICE_UNSUPPORTED` (§6.2.1), and MUST NOT fall back to a
-default policy.
+default policy. It recognises a `service` by comparing octets, and MUST NOT
+case-fold, trim or normalise the value to find a match. §3.2 delivered the
+octets the client's configuration carried, and a name differing in any of them
+is a different name. This differs from `user`, where the received name goes to a
+policy and §6.2 leaves that deployment its own decision, because `service`
+selects which policy runs.
 
 `credential` is carried **verbatim, as raw bytes with an explicit length**, and
 is never re-encoded. §3.2 binds every sender to this, and here it binds the
@@ -1365,6 +1379,9 @@ Nothing here obliges a server to check a credential before it answers.
 valid, and a server MAY answer it without having examined one.
 `AUTHN_DENIED_POLICY` is the exception: a server MUST NOT answer it unless it
 established that the credential was valid, since that is what the code states.
+`AUTHN_DENIED_CREDENTIAL` carries the converse. A server MUST NOT answer it
+where it established that the credential was valid, since a deployment reading
+it reissues a credential that was never the fault.
 
 It carries a second precondition for the same reason. A server MUST NOT answer
 `AUTHN_DENIED_POLICY` where the requested `user` does not resolve, or where it
@@ -1535,7 +1552,9 @@ SHOULD, so the table of SHOULD-report cases below carries that direction.
 *Needs* names a fixture this document does not define. F7 is a precondition of
 every case that reads an outcome from the client under test, rather than of any
 one case, so the column does not repeat it. A case whose assertions are all on
-the wire does not need it.
+the wire does not need it. F11 sits there for the same reason: §6 obliges a
+server to implement no particular request type, so every case that drives one is
+a case the peer may not answer, and the column does not repeat that either.
 
 Every case driven against a server is answerable once the connection is one the
 server will serve, because each carries at least a version word and a server can
@@ -2178,15 +2197,18 @@ is the one place where the test of what a stack does rather than what an entry
 point returns has to be applied.
 
 `PEERCRED_DENIED`, and a `CONNECTION_FAILED` a client reached by refusing the
-server's identity, describe one condition from opposite ends: a client and a
-server that a configuration does not permit to talk. A client that offers an
-override SHOULD apply one setting across them, so an administrator who changes
-how a peer refusal behaves changes every view of it a client can name. A server
-that refuses in silence (§5) leaves the client `RESPONSE_ABSENT`, which §2 makes
-indistinguishable from a server that failed, so no override reaches that shape
-and the default is what it gets. `CONNECTION_FAILED` also covers conditions that
-clear on a retry, such as a socket that is not there yet, and an override keyed
-on a peer refusal does not reach those.
+server's identity or by being refused the socket, describe one condition from
+opposite ends: a client and a server that a configuration does not permit to
+talk. Each is permanent until somebody changes a configuration, which is what
+separates them from the retryable conditions the same name also covers. A client
+that offers an override SHOULD apply one setting across them, so an
+administrator who changes how a peer refusal behaves changes every view of it a
+client can name. A server that refuses in silence (§5) leaves the client
+`RESPONSE_ABSENT`, which §2 makes indistinguishable from a server that failed,
+so no override reaches that shape and the default is what it gets.
+`CONNECTION_FAILED` also covers conditions that clear on a retry, such as a
+socket that is not there yet, and an override keyed on a peer refusal does not
+reach those.
 
 The response codes §7 gives a client:
 
@@ -2245,6 +2267,12 @@ it adds is the outcome of an authentication attempt, so an authentication
 failure is the likelier report. `STATUS_UNKNOWN` keeps `PAM_AUTHINFO_UNAVAIL`
 because it is not a decision at all: an `ERROR` message says the server decided
 nothing.
+
+A client adopting this mapping MUST fail its configuration closed. A module
+argument it does not recognise MUST fail rather than be ignored, which is not
+PAM's usual treatment of one, and a socket path MUST be configured, with no
+default supplied by the client. §2 adds that the path be absolute and
+representable in full.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.

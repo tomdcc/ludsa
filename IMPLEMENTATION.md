@@ -234,6 +234,22 @@ is recovered and reported as `INTERNAL_ERROR`, on an input that is plainly
 if l > uint32(len(buf)-off) { return ErrMalformed }   // right
 ```
 
+**C: the same overflow, without Go's slice panic to catch it.** The extent check
+above is written in Go, where the wrong form panics and the panic is recovered.
+In C it reads off the end of the buffer:
+
+```c
+if (off + (size_t)len > buflen) return LUDSA_MALFORMED;   /* wrong */
+```
+
+With `size_t` 32 bits wide and `len` a `uint32_t` near 2^32, the addition wraps,
+the check passes, and the read runs past the buffer. Establish `off <= buflen`
+first, then compare without the addition:
+
+```c
+if (len > (uint32_t)(buflen - off)) return LUDSA_MALFORMED;   /* right */
+```
+
 ## Draining a rejected message
 
 §3 requires a server that rejects before reading the whole message to send its
@@ -378,6 +394,21 @@ message early send its response and then discard up to `2 x MAX_LENGTH` octets
 before closing, so a client whose write returned `EPIPE` may still have a
 `REQUEST_TOO_LARGE` waiting for it. Reporting the transport error
 without attempting the read throws away the only explanation of it.
+
+**C: do not bound a deadline with `alarm()`.** §2 makes read and write deadlines
+a MUST, and the textbook way to bound a blocking `connect()` or `read()` is
+`alarm()` with a `SIGALRM` disposition. That takes process-global state a
+library must not hold. `alarm()` cancels whatever alarm the host had armed, and
+`sshd` arms one for its login grace period, so a module that bounds its socket
+this way disarms the timer that closes an unauthenticated connection. Installing
+the handler replaces the host's.
+
+Set the socket non-blocking and drive `poll()` against a `CLOCK_MONOTONIC`
+budget. That takes nothing from the host and needs no disposition. §2.1 does not
+reach this: the ninth round bound the write because the protocol authorises a
+server to close on a client still writing, and it named no signal. This is the
+same class of hazard with no rule beside it, which is why the guidance is
+emphatic here.
 
 ## Detecting octets beyond the declared length
 
