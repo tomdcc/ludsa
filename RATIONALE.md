@@ -1034,6 +1034,12 @@ about timing or about the drain, and no case can observe either. Saying what it
 may not allocate for, the octets it is about to throw away, settles it in the
 direction the rule was always about.
 
+The fourteenth round added the offset to the same sentence, because the offset
+is reached first. A check written as `off + len > buflen` wraps where the two
+are the same width, passes, and the read then runs off the end, with nothing
+allocated at any point. The rule was always about arithmetic on a length a peer
+chose, and it had named only the second thing that arithmetic reaches.
+
 ### 3.1 Field maxima
 
 **Why field maxima are in the protocol at all.** A whole-message bound is not

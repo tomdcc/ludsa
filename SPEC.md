@@ -410,10 +410,12 @@ none either: the number failed the one check that would have made it worth
 acting on, and a server that honoured it would close on a peer still writing,
 which is what the drain exists to avoid.
 
-**A client or server MUST NOT allocate storage from any length or count read
-from a message before checking it against the extent of the structure that
-contains it.** That covers `length` against `MAX_LENGTH`, a field's `len`
-against the remaining message.
+**A client or server MUST NOT allocate storage from, or compute an offset from,
+any length or count read from a message before checking it against the extent of
+the structure that contains it.** That covers `length` against `MAX_LENGTH`, a
+field's `len` against the remaining message. The offset is named because it is
+reached first: a check written as an addition against the buffer's end overflows
+before anything is allocated, and then passes.
 
 A response MUST carry the same `ludsa_version_major` as the request it answers,
 whenever the server implements that major version and has read it from the
@@ -1561,10 +1563,10 @@ server will serve, because each carries at least a version word and a server can
 answer in its own major version (§2). A server making the check §5 permits
 refuses before that, and refuses every case here alike, so F12 settles whether
 it accepts the uid the driver connects from. A driver that has not established
-this cannot tell a refusal from a fault (§2). A case
-driven against a client has nothing to answer, so it reports to its caller
-instead. Where a case is marked `either`, the status shown is the server's and
-the client's counterpart is the name paired with the same condition below.
+this cannot tell a refusal from a fault (§2). A case driven against a client has
+nothing to answer, so it reports to its caller instead. Where a case is marked
+`either`, the status shown is the server's and the client's counterpart is the
+name paired with the same condition below.
 
 | # | case | against | status | needs |
 |---|---|---|---|---|
@@ -2076,9 +2078,8 @@ to describe.
 The table above binds a client by its conditions, not by these names. Where it
 gives a status for a case marked `either`, a client detects the same condition
 and reports the response name beside it here, except where the status carries no
-direction and serves both sides. Where a case is marked `client`,
-the status column already holds one of these names, and the same latitude
-applies to it.
+direction and serves both sides. Where a case is marked `client`, the status
+column already holds one of these names, and the same latitude applies to it.
 
 A client reports `VERSION_UNSUPPORTED` for a response major version it does not
 implement, and relays every status it read: under the name the server sent it,

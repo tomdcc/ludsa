@@ -1304,11 +1304,11 @@ module's duplicate and not the credential's presence in the process. Three
 modules stacked together each received the full token although each scrubbed
 before returning, because the host answers every prompt from the copy it holds.
 
-**Keep the prompt identical on both branches.** Selecting on group membership
-before prompting makes the prompt differ between a principal and a local user,
-and a remote caller then reads group membership off the prompt string. That is
-the disclosure `RATIONALE.md` weighs under §6 when it declines a credential-free
-request type, reached without a socket and without a credential.
+**Keep the prompt identical whichever branch is taken.** Selecting on group
+membership before prompting makes the prompt differ between a principal and a
+local user, and a remote caller then reads group membership off the prompt
+string. That is the disclosure `RATIONALE.md` weighs under §6 when it declines a
+credential-free request type, reached without a socket and without a credential.
 
 **`sshd` differs from PostgreSQL in ways worth designing against.** It is the
 second host the C library is meant to sit in, and the differences are where a
