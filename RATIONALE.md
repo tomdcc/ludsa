@@ -58,12 +58,22 @@ every client. The tenth round gave it the same equipment, on the ground that the
 two rules guard one failure and a rule with no party is one a conforming
 implementation may ignore.
 
-`CONNECTION_FAILED` rather than `INVALID_REQUEST`, for the same reason
-truncation takes it: §7 gives `INVALID_REQUEST` to the caller's own input, and a
-socket path is the deployment's configuration rather than anything the caller
-supplied. It carries the fall-through that Appendix B gives
-`PAM_AUTHINFO_UNAVAIL`, which the truncation rule already carried, so nothing
-new turns on it here.
+Not `INVALID_REQUEST`, for the same reason truncation is not: §7 gives
+`INVALID_REQUEST` to the caller's own input, and a socket path is the
+deployment's configuration rather than anything the caller supplied.
+
+Both took `CONNECTION_FAILED` until the fifteenth round, on the ground that
+nothing turned on the choice. Something did. Appendix B gives
+`CONNECTION_FAILED` the fall-through code, so a module configured with a
+relative `socket=` told its operator the authentication service was unavailable
+and let the stack fall through on every login, and Appendix B's override is
+keyed on a peer refusal and could not reach it. A path that is not absolute is
+settled before any syscall and cannot clear on a retry, which is the property
+`CONNECTION_FAILED` does not carry. So §7 gained `INVALID_CONFIGURATION` for the
+client's own configuration, Appendix B maps it to `PAM_SYSTEM_ERR`, and
+`CONNECTION_FAILED` keeps only conditions about the far end, which its
+definition and Appendix B's override paragraph both already assumed. It is a
+client-local name, so §4.1 freezes nothing and no wire value moved.
 
 **Why a client must survive a write failing, after four rounds of declining
 it.** Every earlier proposal was a rule about signals, and every decline
@@ -2693,9 +2703,21 @@ says what resolving means: the server holds the name, whatever its policy says
 about who may act as it.
 
 **Why `AUTHN_DENIED_CREDENTIAL` carries a precondition too.** §6.2.1 bound the
-policy code and the unknown-user code and left the credential code free. A
-server that had established the credential was valid could still name it, and
-what that costs an operator is a reissued credential that was never the fault.
+policy code and the unknown-user code and left the credential code free. What
+that costs an operator is a reissued credential that was never the fault.
+
+The fifteenth round found the first form unable to close it. It prohibited a
+server that had established the credential was valid from naming the code. That
+reaches the server which did the work and then named the wrong reason. It leaves
+the server that short-circuited on the user mapping free to name a credential
+fault it never looked for, and that is the likelier route to the same reissue.
+§6.2.1 says in terms that nothing obliges a server to check a credential before
+it answers, so a prohibition keyed on what a server established had little to
+bite on. The rule now reads as its siblings do, keyed on the server having
+established the credential invalid. §7 can then exclude it, since F3 supplies a
+credential the peer accepts and no conforming server can have established that
+one invalid.
+
 The divergence it closes is between servers that name a reason at all. One that
 names none is left where Appendix B already leaves it, paying the
 `auth`-versus-`account` distinction as the price of saying nothing. Every code
@@ -2914,9 +2936,11 @@ construction catches anything at all.
 **Why the relative-path case needs a fixture of its own.** F9 is the working
 directory the driver gives the client's host, and the case does not work without
 it. A relative path resolves somewhere, and if the driver does not choose where,
-it resolves to a name that holds nothing: the client gets `ENOENT`, reports
-`CONNECTION_FAILED`, and passes whether it refused the path or resolved it. Both
-assertions are satisfied by the behaviour the case exists to catch.
+it resolves to a name that holds nothing. Since the fifteenth round the name
+separates those clients: one that resolved and got `ENOENT` reports
+`CONNECTION_FAILED`, and one that refused the path reports
+`INVALID_CONFIGURATION`. What the name cannot separate is the client that
+resolves onto a live socket, which fails nothing and reports nothing.
 
 The driver therefore binds its socket in a directory, puts the client's host in
 that directory, and configures the client with the basename. A client that

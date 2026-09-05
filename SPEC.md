@@ -190,8 +190,10 @@ A client that never establishes a connection it is willing to use reports
 there, a retryable reason that had not resolved by the client's deadline, and a
 peer whose identity is not the one the client was configured to expect. No
 `RESPONSE_` name fits it, because a response cannot be absent from a request
-that was never sent. §3.1's `INVALID_REQUEST` is the other name a client reports
-with no exchange behind it, for input it may not put on the wire at all.
+that was never sent. Each condition it covers is about the far end. Where a
+client reached no far end at all, `INVALID_CONFIGURATION` (§7) names its own
+configuration, and `INVALID_REQUEST` (§3.1) names input its caller may not put
+on the wire.
 
 **A client may be configured with the server identity it expects**, as a uid.
 Where it is, the client MUST confirm the peer's identity before it writes. It
@@ -204,9 +206,7 @@ therefore fails rather than proceeds.
 
 This document names no mechanism, because none works everywhere. Where the two
 sides do not share a user namespace, a peer uid is translated or comes back as
-the overflow uid. A client with no such configuration is conforming. What the
-rule closes is a client that was told what to expect and sent a credential to
-something else.
+the overflow uid. A client with no such configuration is conforming.
 
 **Socket visibility.** At the path clients use, the socket MUST never be
 observable with any of the twelve mode bits `07777` set that `0660` does not, or
@@ -230,8 +230,8 @@ resolves against a working directory neither side controls, and a client loaded
 into a host process neither chooses that directory nor knows when it changes. A
 server configured with a relative path MUST fail to start. A client configured
 with one MUST NOT connect, and reports the condition §7 names
-`CONNECTION_FAILED`. Neither resolves it against a working directory to find out
-what it names.
+`INVALID_CONFIGURATION`. Neither resolves it against a working directory to find
+out what it names.
 
 Each side configures its own path, and the two need not be the same string: a
 volume mounted at different points gives one socket two names, and neither side
@@ -245,10 +245,10 @@ neither side may rely on a platform accepting a path that fills it. Neither call
 reports the condition afterwards: a truncated path either names nothing or names
 a different socket, and both are indistinguishable from a correct one. A server
 whose path does not fit MUST fail to start. A client whose path does not fit
-MUST NOT connect, and reports the condition §7 names `CONNECTION_FAILED`. Each
-SHOULD name the maximum its platform allows in the diagnostic it emits, since
-that is what makes the failure actionable and neither side can learn it from the
-other.
+MUST NOT connect, and reports the condition §7 names `INVALID_CONFIGURATION`.
+Each SHOULD name the maximum its platform allows in the diagnostic it emits,
+since that is what makes the failure actionable and neither side can learn it
+from the other.
 
 A server MUST refuse to start if the configured path exists
 and is not a socket, and MUST apply that test before it removes or replaces
@@ -1387,8 +1387,10 @@ valid, and a server MAY answer it without having examined one.
 `AUTHN_DENIED_POLICY` is the exception: a server MUST NOT answer it unless it
 established that the credential was valid, since that is what the code states.
 `AUTHN_DENIED_CREDENTIAL` carries the converse. A server MUST NOT answer it
-where it established that the credential was valid, since a deployment reading
-it reissues a credential that was never the fault.
+unless it established that the credential was invalid, since a deployment
+reading it reissues a credential, and one that was never examined was never the
+fault. A server that denied without examining a credential has `AUTHN_DENIED`,
+which is always available.
 
 `AUTHN_DENIED_POLICY` carries a further precondition, and for the reason its
 first one has. A server MUST NOT answer it where the requested `user` does not
@@ -1726,7 +1728,7 @@ can reach:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential valid for one identity, sent with a `user` the server holds that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_USER_UNKNOWN` | F1, F3 |
+| A credential valid for one identity, sent with a `user` the server holds that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_USER_UNKNOWN` and not `AUTHN_DENIED_CREDENTIAL` | F1, F3 |
 | A credential the peer accepts, sent with a `user` of zero octets, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
 
 Requiring an `AUTHENTICATE_RESPONSE`, and requiring a denial within it, each
@@ -1736,13 +1738,15 @@ choose one, and a `service` the server does not hold obliges it to answer
 A peer holding no services would otherwise pass the only test of §6.2's binding
 rule without examining a credential.
 
-The first case excludes one code. F3 supplies a `user` the server holds and a
-credential it accepts, so the name resolves and an identity resolved, which is
-what §6.2.1 makes `AUTHN_DENIED_USER_UNKNOWN` untrue of. The case cannot require
-`AUTHN_DENIED_POLICY` in its place, since §6.2 leaves a server free to name no
-reason at all. The second case excludes nothing, because whether a `user` of
-zero octets resolves is a deployment's own fact and F3 settles only that the
-policy refuses it.
+The first case excludes the codes §6.2.1's preconditions make untrue here. F3
+supplies a `user` the server holds, so the name resolves and an identity
+resolved, which is what §6.2.1 makes `AUTHN_DENIED_USER_UNKNOWN` untrue of. F3
+supplies a credential the server accepts, so the server established that
+credential valid, which is what §6.2.1 makes `AUTHN_DENIED_CREDENTIAL` untrue
+of. The case cannot require `AUTHN_DENIED_POLICY` in its place, since §6.2
+leaves a server free to name no reason at all. The second case excludes nothing,
+because whether a `user` of zero octets resolves is a deployment's own fact and
+F3 settles only that the policy refuses it.
 
 Further cases exercise the selector, which is neither a rejection nor a
 decision. Each drives the same condition into the enumeration its response type
@@ -1866,15 +1870,16 @@ document:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A configured socket path too long for the platform's socket address | client | the client reports `CONNECTION_FAILED`, and no socket the driver bound saw a connection | |
+| A configured socket path too long for the platform's socket address | client | the client reports `INVALID_CONFIGURATION`, and no socket the driver bound saw a connection | |
 
 No fixture beyond F7 is needed, since every case driven against a client already
 configures it with a socket path. The driver's own paths are not free, though. A
 client that truncates lands on one of the sockets it bound, so the assertion
 that no connection arrived is what fails such a client. A driver that bound
-anywhere else could not tell one from a conforming client, since a truncated
-path that names nothing draws the same `CONNECTION_FAILED` as a path never
-used.
+anywhere else catches only the truncating client whose shortened path names
+nothing, which reports `CONNECTION_FAILED` where a conforming client reports
+`INVALID_CONFIGURATION`. The one that lands on a live socket is what the second
+assertion is for.
 
 One further case observes a client configured with a path §2 forbids for a
 different reason. The driver binds its socket in a directory of its choosing,
@@ -1883,7 +1888,7 @@ client with the socket's basename alone:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A configured socket path that is not absolute | client | the client reports `CONNECTION_FAILED`, and the driver's socket saw no connection | F9 |
+| A configured socket path that is not absolute | client | the client reports `INVALID_CONFIGURATION`, and the driver's socket saw no connection | F9 |
 
 The second assertion is the one that separates the answers, and the driver's
 choice of directory is what gives it force. A client that resolves the path
@@ -2078,6 +2083,7 @@ still conforming:
 | `RESPONSE_ABSENT` | the server's side ended with no response octet sent |
 | `RESPONSE_TIMEOUT` | the client's deadline expired before the declared octets had arrived |
 | `CONNECTION_FAILED` | the client never established a connection it was willing to use |
+| `INVALID_CONFIGURATION` | the client's own configuration could not produce a conforming request or a usable connection |
 | `INVALID_REQUEST` | the caller's own input could not be carried in a conforming request |
 
 A client whose host wants a distinct code per condition MAY subdivide these,
@@ -2233,6 +2239,7 @@ The response codes §7 gives a client:
 | `RESPONSE_ABSENT` | `PAM_AUTHINFO_UNAVAIL` |
 | `RESPONSE_TIMEOUT` | `PAM_AUTHINFO_UNAVAIL` |
 | `CONNECTION_FAILED` | `PAM_AUTHINFO_UNAVAIL` |
+| `INVALID_CONFIGURATION` | `PAM_SYSTEM_ERR` |
 | `INVALID_REQUEST` | `PAM_SYSTEM_ERR` |
 
 `RESPONSE_MALFORMED` is evidence of a bug in the server (§5), so it needs a
@@ -2284,7 +2291,12 @@ A client adopting this mapping MUST fail its configuration closed. A module
 argument it does not recognise MUST fail rather than be ignored, which is not
 PAM's usual treatment of one, and a socket path MUST be configured, with no
 default supplied by the client. §2 adds that the path be absolute and
-representable in full.
+representable in full. Each of those is the condition §7 names
+`INVALID_CONFIGURATION`, so a client that fails its configuration SHOULD return
+the code this appendix gives that name, from every entry point, and MUST NOT
+return `PAM_SUCCESS` or `PAM_IGNORE` from one. The fall-through code tells an
+operator to wait, and a stack given it falls through on every login until
+somebody edits a file.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.

@@ -712,7 +712,7 @@ response struct on an internal-failure path emits `result` 0 or `status` 0. A
 and the zero arrives from the handler above them, and §7 records that no input
 provokes the breach, so a conformance run cannot see it either. Give the
 enumeration types no usable zero: an explicit unset constant, and an encoder
-that rejects it rather than trusting the handler to have set it.
+that rejects it, so a handler that left the field unset fails at the encoder.
 
 **The same warning applies on decode, for the opposite reason.** A map catches
 a repeated tag for free, which is what makes it tempting, and it discards the
@@ -1441,9 +1441,11 @@ racing every other thread, which is the objection that keeps
 `signal(SIGPIPE, SIG_IGN)` out of `libludsa` too.
 
 §2 settles what each side does rather than resolving one: a server fails to
-start and a client refuses to connect, reporting `CONNECTION_FAILED`. The test
-is on the configured string before any call, since a leading `/` is the whole of
-it, and neither `bind` nor `connect` reports the condition afterwards.
+start and a client refuses to connect, reporting `INVALID_CONFIGURATION`. The
+test is on the configured string before any call, since a leading `/` is the
+whole of it, and neither `bind` nor `connect` reports the condition afterwards.
+Appendix B maps that name to `PAM_SYSTEM_ERR`. A path somebody has to edit needs
+a person, and the fall-through code tells an operator to wait.
 
 ## Peer credentials
 
