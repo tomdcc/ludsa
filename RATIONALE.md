@@ -62,6 +62,15 @@ Not `INVALID_REQUEST`, for the same reason truncation is not: §7 gives
 `INVALID_REQUEST` to the caller's own input, and a socket path is the
 deployment's configuration rather than anything the caller supplied.
 
+The sixteenth round carried that principle to the field values themselves. §3.1
+and §3.3 both send a value a client may not put on the wire to
+`INVALID_REQUEST`. Both were written for the caller's own input. But `service`
+reaches a client from its host configuration (§6.2), so an over-long or
+NUL-bearing `service` drew a name that tells an operator to look at the
+credential. Provenance decides it, as it decided the socket path. The split
+earns its place for the reason §5 gives: the name tells an operator which party
+has something to change.
+
 Both took `CONNECTION_FAILED` until the fifteenth round, on the ground that
 nothing turned on the choice. Something did. Appendix B gives
 `CONNECTION_FAILED` the fall-through code, so a module configured with a
@@ -122,6 +131,17 @@ survives both is the first leg: the client chooses how to apply a deadline, the
 alternative costs nothing, and a rule here would bind a construction rather than
 an outcome the protocol delivered. The objection record carries the argument in
 full, since it is the one most likely to be raised again.
+
+The sixteenth round defeated the leg that survived. A client may bound a write
+with `MSG_NOSIGNAL`, or it may ignore `SIGPIPE` across the whole process. §2.1
+as written permitted either, since it bound the outcome and disclaimed any rule
+about construction. So the write case offered the same pair the deadline case
+does, one local and one process-global. The asymmetry the decline rested on was
+not there. What the rule reached for in both was one outcome: a client is loaded
+into a host it does not own, and may not take process-wide state to meet an
+obligation this document puts on it. §2.1 now says that. It catches `alarm()` by
+its effect rather than by its name, and leaves the construction free, as every
+decline since the fourth round has wanted.
 
 The authorised-condition boundary also answers the objection that would
 otherwise sink it, which is the one that removed the format-string MUST: naming
@@ -299,16 +319,6 @@ after it, the client has already answered its host. What the document does not
 do is have a client retract a verdict its host has acted on, which is where the
 asymmetry with a server ends. A grant already returned to an `sshd` is not
 something a later octet takes back.
-
-**Why the peer-times-`service` gate is pinned rather than bounded below.** §4
-gave it a lower bound and stopped, on the ground that the selector is what makes
-the question answerable. The fifteenth round found that leaves the rest of the
-order free: a peer refused a `service` it may not reach, on a request whose
-`max_age` the server's own limit also forbids, draws `PEERCRED_DENIED` from a
-server that settles the gate at step 11 and `RATE_LIMITED` from one that settles
-it after step 12. Both are `ERROR` statuses and the difference is on the wire,
-which is the express ground §7 already pins step 11 before step 12 on. A lower
-bound was half of an ordering rule.
 
 **Why detecting excess octets is optional but rejecting them is not.** These are
 different questions. Whether a client or server notices octets past the declared
@@ -1353,8 +1363,11 @@ leaves a client free to put a response type in a request.
 The type rules had the same gap. §3.3 bound a receiver to reject a value its
 type forbids, and bound a client not to connect with one. It never bound a
 sender, and §5 and §7 both rested on a server being bound. `MAX_LENGTH` was
-another. §3 addressed every sentence about it to a receiver, and §5 told a
-client reading `REQUEST_TOO_LARGE` that its peer had sent something §3 forbade.
+another, in both directions: §3 addressed every sentence about it and about the
+minimum a version declares to a receiver, and §5 told a client reading
+`REQUEST_TOO_LARGE` that its peer had sent something §3 forbade. A message
+type's required fields were the last of them: §4's step 10 and §7's case 14 both
+bind a receiver, and neither said the sender owed them.
 
 These now sit in §3.2, beside the tag rules, which is where a sender's
 obligations already were. Stating them in one list is what stops the next
@@ -1732,6 +1745,22 @@ written before the drain begins, and a client's fixed receive buffer depends on
 the same freedom. So a message both truncated and faulty in the octets that
 arrived takes either status, and §7 excludes it as a case rather than choosing
 one, on the same footing as a request that stalls before its version word.
+
+**Why the peer-times-`service` gate is pinned rather than bounded below.** §4
+gave it a lower bound and stopped, on the ground that the selector is what makes
+the question answerable. The fifteenth round found that leaves the rest of the
+order free: a peer refused a `service` it may not reach, on a request whose
+`max_age` the server's own limit also forbids, draws `PEERCRED_DENIED` from a
+server that settles the gate at step 11 and `RATE_LIMITED` from one that settles
+it after step 12. Both are `ERROR` statuses and the difference is on the wire,
+which is the express ground §7 already pins step 11 before step 12 on. A lower
+bound was half of an ordering rule.
+
+The sixteenth round gave that difference a case. Pinning an order on what a
+receiver puts on the wire, and then driving nothing that would show it, leaves
+the rule resting on an observation no run makes. F12 already settled whether the
+peer checks its caller at all; it now also settles a `service` the driver's own
+uid may not reach, which is what the case needs and what no wire input supplies.
 
 **The seventh round chose one and the eighth put it back.** The case for
 choosing was that the two statuses reach different PAM codes, so one stack falls
@@ -2332,13 +2361,14 @@ with no substitution at all. Binding the checks to the extent the field declared
 is what closes it, and it is the same sentence §6.2 spends on `credential` for
 the same reason.
 
-**What was declined with it.** The eighth round proposed banning U+2028, U+2029
-and the bidirectional overrides. Neither earns a place in the banned set. U+2028
-and U+2029 do not terminate a line for syslog or for a text log, and the parsers
-that once choked on them do not any more. The overrides mislead a human reading
-a line rather than forging one, which is a different class, and banning them
-would put a filtering obligation on every server and cut against §3.3's rule
-that a receiver imposes no constraint a field's own definition does not carry.
+**Why U+2028, U+2029 and the bidirectional overrides are not banned.** The
+eighth round proposed banning them. Neither earns a place in the banned set.
+U+2028 and U+2029 do not terminate a line for syslog or for a text log, and the
+parsers that once choked on them do not any more. The overrides mislead a human
+reading a line rather than forging one, which is a different class, and banning
+them would put a filtering obligation on every server and cut against §3.3's
+rule that a receiver imposes no constraint a field's own definition does not
+carry.
 
 **Why the receiver's check is at the point of use.** The producer's obligation
 alone leaves nothing that must ever look, so a client may take the guarantee at
@@ -2631,10 +2661,20 @@ pointing at §6.2: its `service` is a different field in a different message
 type, and without the pointer a server whose STATUS handler looked the name up
 case-insensitively answered `SERVING` for a name its AUTHENTICATE path answered
 `SERVICE_UNSUPPORTED` for, which is a server disagreeing with itself about which
-policies it holds. F1 now also supplies a value differing from the recognised
-one only in letter case and surrounding whitespace, and §7 drives it into both
-response types. Unlike the `credential` rule this one is modelled on, it is
-wire-observable throughout, so there was no reason for it to go undriven.
+policies it holds. F1 now also supplies values near the recognised one, and §7
+drives them into both response types. Unlike the `credential` rule this one is
+modelled on, it is wire-observable throughout, so there was no reason for it to
+go undriven.
+
+The sixteenth round found the near-miss value could not detect what it was for.
+One value differing in letter case and in surrounding whitespace at once is
+matched by neither a server that only folds case nor one that only trims, so
+both answer `SERVICE_UNSUPPORTED` and pass while breaking the rule. A variant
+has to differ in one dimension alone for a server's failure in that dimension to
+route it anywhere. So F1 supplies two, and each drives both response types. It
+also names the deployments that cannot construct one: a recognised name with no
+letters has no case variant, and one near `service`'s maximum leaves no room for
+surrounding whitespace.
 
 #### 6.2.1 Auth result
 
@@ -2792,6 +2832,14 @@ intended deployments no consumer needs one without the other. Probes run inside
 the server's own container at its own uid, and metrics scraping uses a separate
 HTTP endpoint. So anything permitted to query health is also permitted to
 authenticate, which is an accepted consequence rather than an oversight.
+
+What that entry once said, and no longer says, is that the socket's permissions
+are the only gate. They were, before §5 let a server check the connecting peer
+and §4 pinned a gate on which peers may reach which `service` values. A
+`STATUS_REQUEST` carries a `service`, so both gates reach it, and a sentence
+exempting STATUS from them left two conforming servers answering the same
+request differently on a question that decides what a peer can enumerate. The
+credential is what STATUS does without; the peer check is not.
 
 **Why `service` selects a policy.** A server may serve several services with
 different configuration, meaning different expected audiences and different
@@ -3165,31 +3213,48 @@ and is not a decision, so both rows passed while nothing was tested. A
 `ludsa-mockd` configured with no services at all certified against the only test
 of §6.2's binding rule without ever examining a credential.
 
-Naming the `AUTHN_DENIED` codes rather than "not `OK`" is what closes it, and
+Naming the `AUTHN_DENIED` codes rather than "not `OK`" is what closes that, and
 naming them by their prefix rather than by their numbers is what keeps it closed
 if a later version adds one.
 
-**Why only the first decision case excludes a code.** §6.2.1's line is whether
+It does not close the server that denies every request, which answers one of
+those codes and has still examined nothing. The sixteenth round found that
+residue and gave the group a baseline: a credential the peer accepts,
+unmodified, answered `OK`. Every case in this group asserts a refusal of some
+kind, so without one case asserting an affirmative outcome, a peer that refuses
+everything satisfies all of them. That reaches further than the decision cases:
+the credential case turns on a server answering `OK` to the unmodified value and
+denying the modified one, and only the baseline establishes the first half.
+
+**Why the decision cases exclude the codes they do.** §6.2.1's line is whether
 the requested name resolves, and the tenth round found the code table's own
 gloss contradicting it. Once the gloss was corrected, the first case became able
 to separate the two denials, but only because F3 supplies a `user` the server
-holds. Without that the name might not resolve, and
-`AUTHN_DENIED_USER_UNKNOWN` would be the true answer. The case still cannot
-require `AUTHN_DENIED_POLICY`, since naming a reason at all is a server's
-choice. The second case cannot separate them, because whether a name of zero
-octets resolves is a deployment's own fact and F3 settles only that the policy
-refuses it.
+holds. Without that the name might not resolve, and `AUTHN_DENIED_USER_UNKNOWN`
+would be the true answer. Neither case can require `AUTHN_DENIED_POLICY`, since
+naming a reason at all is a server's choice. The second case cannot separate the
+two denials either, because whether a name of zero octets resolves is a
+deployment's own fact and F3 settles only that the policy refuses it.
 
-**Why the over-long identity case sends no `user`.** The case was written
-without saying, and the only `user` F3 supplies is one the policy refuses, so a
-server would deny, and §6.2's comparison runs within one `result`, which lets a
-conforming server carry `authn_id` on an `OK` and not on a denial. It then has
-no value to carry and no `INTERNAL_ERROR` arises. The case would have failed a
-conforming server. With no `user`, and F3 supplying a credential the server
-would answer `OK` to without one, the identity's length is the only thing
-between the server and an `OK` carrying the field. F3 also had to say whether
-the server is configured to supply `authn_id`, since one that is not answers the
-same `OK` with no field and is conforming.
+The fifteenth round restated `AUTHN_DENIED_CREDENTIAL` on what a server
+established, and the sixteenth found the exclusion that follows reaches both
+cases rather than the first alone. F3 supplies a credential the peer accepts, so
+no conforming server can have established that credential invalid, whichever
+`user` the request carried. The trailing-newline case takes the converse and
+excludes `AUTHN_DENIED_POLICY`, since the credential there is invalid by
+construction and that code binds on the credential having been established
+valid.
+
+**Why the identity cases send no `user`.** They were written without saying, and
+the only `user` F3 supplies is one the policy refuses, so a server would deny,
+and §6.2's comparison runs within one `result`, which lets a conforming server
+carry `authn_id` on an `OK` and not on a denial. It then has no value to carry
+and no `INTERNAL_ERROR` arises. They would have failed a conforming server. With
+no `user`, and F3 supplying a credential the server would answer `OK` to without
+one, the identity the server resolved is the only thing between it and an `OK`
+carrying the field. F3 also had to say whether the server is configured to
+supply `authn_id`, since one that is not answers the same `OK` with no field and
+is conforming.
 
 **Why the empty `user` case needs the fixture to say so.** An absent `user` asks
 the server not to decide. It does not bind the exchange to an empty or null
@@ -3322,6 +3387,18 @@ the rest of the stack decide as though the module were not there. The project
 had treated this as a rule from the start, and only the working notes carried
 it.
 
+**Why the `service` is configured rather than taken from the stack.** The
+appendix bound the socket path and said nothing about where the `service` comes
+from, while resting its own reasoning on the `service` having come from the
+stack's own configuration with no user choosing it. A client is free under that
+to read a `service=` argument or to fall back on the name of the stack it was
+loaded into, and both readings satisfy §6.2's source column. The consequence is
+the one the appendix exists to prevent: an operator who copies a working stack
+file to another service silently changes which policy the server runs, with
+nothing in the module line to show it, and no case in §7 can tell the two
+clients apart. So the `service` is bound as the socket path is, and for the same
+reason.
+
 The thirteenth round added the path with no `PAM_USER` to key on. The rule
 presumed a `user` for the same reason the `OK` row did, and the twelfth round
 stated that presumption in the row and left it unstated here. A client on §6.2's
@@ -3330,11 +3407,14 @@ nothing for the user it is now asked about and could never pass its own account
 phase. `pam_ludsa` always sends `user`, which is why nothing reached it, and the
 appendix binds any PAM client that adopts the mapping.
 
-**Why the three peer-identity outcomes share a code.** A socket the client
-cannot open, a peer that is not the one the client expects, and a server that
-refuses the peer it got are one condition seen from three positions: these two
-processes are not permitted to talk, because a configuration says so. They all
-map to `PAM_AUTHINFO_UNAVAIL`. An earlier draft sent `PEERCRED_DENIED` to
+**Why the peer-identity outcomes share a code.** A socket the client cannot open
+for want of permission, a peer that is not the one the client expects, and a
+server that refuses the peer it got are one condition seen from several
+positions: these two processes are not permitted to talk, because a
+configuration says so. Each maps to `PAM_AUTHINFO_UNAVAIL`. A path the client's
+own configuration makes unusable is not one of them: since the fifteenth round
+that is `INVALID_CONFIGURATION`, which the appendix sends to `PAM_SYSTEM_ERR`
+because no wait resolves it. An earlier draft sent `PEERCRED_DENIED` to
 `PAM_SYSTEM_ERR`, which made the server's half of the check stop a stack that
 the client's half and the filesystem's half let fall through.
 

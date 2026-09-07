@@ -661,8 +661,8 @@ are consumed, and not behind holding what the step needs.
 
 **Nothing in `testdata/` can catch this.** A vector handed to a decoder in one
 call always arrives whole, so arrival order never varies and every gated step
-fires when an ungated one would. §7's third selector case drives the `max_age`
-half against a real socket. A segmented feeder in the server tests is what
+fires when an ungated one would. §7's selector case carrying `max_age` drives
+that half against a real socket. A segmented feeder in the server tests is what
 reaches the rest.
 
 Run the schema-independent pass over the whole message first, then dispatch,
@@ -709,12 +709,14 @@ sender: it MUST NOT emit 0 or 1 in any enumeration. Go's zero value breaches
 that without anyone choosing it, because a handler that returns an empty
 response struct on an internal-failure path emits `result` 0 or `status` 0. A
 `wire` suite cannot see it, since vectors compare a codec against fixed bytes
-and the zero arrives from the handler above them, and §7 records that no input
-provokes the breach, so a conformance run cannot see it either. Give the
+and the zero arrives from the handler above them, and §7 gives it no case of its
+own, since no input provokes it: a driver records the breach only where a run
+happens to produce one, so nothing you can drive will surface it. Give the
 enumeration types no usable zero: an explicit unset constant, and an encoder
 that rejects it, so a handler that left the field unset fails at the encoder.
+The decode side of the same zero is below, under a field absent from the wire.
 
-**The same warning applies on decode, for the opposite reason.** A map catches
+**The map hazard applies on decode too, for the opposite reason.** A map catches
 a repeated tag for free, which is what makes it tempting, and it discards the
 ordering §7 case 6 requires. The check has to happen while scanning, comparing
 each tag against the one before, because a map built first cannot be validated

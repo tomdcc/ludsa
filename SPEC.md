@@ -112,8 +112,8 @@ ends. A server owing no drain MAY close outright instead, which ends both
 directions at once. There is no connection reuse, so a client that reads on for
 end of file never blocks on a draining server. A client MUST NOT require end of
 file to complete an exchange whose declared octets it already holds, since a
-server closing with octets still unread may end that read in an error instead
-(§7).
+server closing with octets still unread may end that read in an error rather
+than at end of file, and this document does not say which.
 
 **A message is delivered at its declared octets.** A receiver holding every
 octet the envelope declared holds the message. Nothing that happens on the
@@ -191,10 +191,10 @@ A client that never establishes a connection it is willing to use reports
 there, a retryable reason that had not resolved by the client's deadline, and a
 peer whose identity is not the one the client was configured to expect. No
 `RESPONSE_` name fits it, because a response cannot be absent from a request
-that was never sent. Each condition it covers is about the far end. Where a
-client reached no far end at all, `INVALID_CONFIGURATION` (§7) names its own
-configuration, and `INVALID_REQUEST` (§3.1) names input its caller may not put
-on the wire.
+that was never sent. Each condition it covers is one the client reached by
+attempting a connection. Where a client's own configuration stopped it before it
+attempted one, `INVALID_CONFIGURATION` (§7) names that, and `INVALID_REQUEST`
+(§3.1) names input its caller may not put on the wire.
 
 **A client may be configured with the server identity it expects**, as a uid.
 Where it is, the client MUST confirm the peer's identity before it writes. It
@@ -271,12 +271,15 @@ every version of the protocol:
   independently. A client MUST NOT keep a connection or descriptor between
   requests. The protocol does not guarantee startup order, which is a deployment
   concern.
-- **A client survives what this document lets a server do.** A client MUST NOT
-  cause its host application to terminate as a result of a write to the socket
-  failing. §2, §3 and §5 each authorise a server to close a connection a client
-  is still writing to, so that write failing is a conforming exchange rather
-  than a fault, and a client is loaded into a host application it does not own
-  (§1). This binds nothing about how a client is built beyond that outcome.
+- **A client survives what this document lets a server do, and leaves its host
+  as it found it.** A client MUST NOT cause its host application to terminate
+  as a result of a write to the socket failing, and MUST NOT change
+  process-wide state its host application relies on in order to meet any
+  obligation this document puts on it. §2, §3 and §5 each authorise a server to
+  close a connection a client is still writing to, so that write failing is a
+  conforming exchange rather than a fault, and §2's deadlines are the client's
+  own to construct. A client is loaded into a host application it does not own
+  (§1). This binds nothing about how a client is built beyond those outcomes.
 
 ## 3. Framing
 
@@ -456,11 +459,14 @@ client receiving `error_detail`, `server_desc` or `authn_id`. A server reports
 `REQUEST_MALFORMED`; §7 says what a client reports. A sender MUST NOT emit a
 field above its maximum, and no party may truncate a value to fit. A client
 asked to send one MUST NOT open a connection to send it, and reports the
-condition §7 names `INVALID_REQUEST` to its host application. This holds whether
-the field is required or optional. A client MUST NOT omit the field and send the
-rest, because a request without it asks something other than what its host
-application asked. Dropping a field, or shortening a value, is the host
-application's decision, and it makes it with the report in hand.
+condition §7 names `INVALID_REQUEST` to its host application. Where the value
+came from the client's own configuration rather than from its caller, the
+condition is `INVALID_CONFIGURATION` (§7) instead, and the prohibition on
+connecting is the same. This holds whether the field is required or optional. A
+client MUST NOT omit the field and send the rest, because a request without it
+asks something other than what its host application asked. Dropping a field, or
+shortening a value, is the host application's decision, and it makes it with the
+report in hand.
 
 A server with a value to carry in a field, and no way to carry it within that
 field's maximum or in a form the field's type and its own definition permit,
@@ -560,10 +566,12 @@ from 1.
 | `bytes` | `0x4` | dynamic | none |
 
 §3.2 binds a sender to the values its field's type permits. A client asked to
-send one it does not MUST NOT open a connection to send it, and reports the
-condition §7 names `INVALID_REQUEST` to its host application. §3.1 says the same
-for a value above its maximum. Neither lets a client alter the value to make it
-sendable (§3.2).
+send a value its field's type does not permit MUST NOT open a connection to send
+it, and reports the condition §7 names `INVALID_REQUEST` to its host
+application, or `INVALID_CONFIGURATION` where the value came from its own
+configuration rather than from its caller (§3.1). §3.1 says the same for a value
+above its maximum. Neither lets a client alter the value to make it sendable
+(§3.2).
 
 **A tag's shape is checked before its identity.** A receiver MUST reject a tag
 as `REQUEST_MALFORMED` on any of these grounds, whether or not it recognises
@@ -1303,8 +1311,9 @@ Response:
 `system:serviceaccount:app:web`. A client that cannot use it ignores it. A
 server MAY omit it whether or not the request carried a `user`, and version 1.0
 gives a client no way to require one. That permission is about a server with no
-identity to send. One that resolved an identity it cannot carry within the
-field's maximum does not omit it, and §3.1 says what it answers instead.
+identity to send. One that resolved an identity it cannot carry in the field,
+whether for its length or its form, does not omit it, and §3.1 says what it
+answers instead.
 
 A client that omits `user` and cannot derive the identity from the credential
 therefore depends on being deployed against a server that supplies `authn_id`.
@@ -1438,8 +1447,10 @@ A client SHOULD cache `result` rather than make a second request.
 
 Reports health, for readiness probes and diagnostics.
 
-**STATUS carries no credential.** The socket's own access controls are the only
-gate on it.
+**STATUS carries no credential**, and no credential gates it. §5's peer check,
+where a server makes one, reaches a STATUS connection as it reaches any other,
+and a server whose rules govern which peers may reach which `service` values
+applies them here too (§4).
 
 Request:
 
@@ -1663,28 +1674,33 @@ Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
 
 - **F1**: a `service` value the peer recognises, and one it does not. It also
-  gives a value differing from the recognised one only in the case of its
-  letters and in leading and trailing whitespace, which the peer's configuration
-  does not hold. A deployment holding that variant as a `service` of its own
-  cannot supply it, and cannot run the cases below that use it.
+  gives two values the peer's configuration does not hold: one differing from
+  the recognised value only in the case of its letters, and one differing from
+  it only in leading and trailing whitespace. A deployment that cannot supply a
+  variant, because it holds that variant as a `service` of its own, because its
+  recognised value has no letters, or because its recognised value leaves no
+  room within `service`'s §3.1 maximum, cannot run the cases below that use
+  that variant and is not non-conforming for that.
 - **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
   applies only where it does, and a peer without a limit is not non-conforming
   for never exhibiting it.
 - **F3**: a credential the peer accepts, and a `user` the server holds that its
-  policy does not map that credential's identity to. The policy must also refuse
-  that identity a `user` of zero octets, which a deployment whose policy grants
-  any `user` cannot supply. Such a peer cannot run the second decision case and
-  is not non-conforming for that. It also says whether appending a trailing
-  newline to that credential makes it invalid to the peer's backend, which is
-  what the credential case below appends. A backend that accepts the modified
-  value cannot run that case and is not non-conforming for that either. It also
-    says whether the server is configured to supply `authn_id`. Where it is and
-  the backend can supply one, it also gives a credential whose resolved identity
-  is longer than `authn_id`'s §3.1 maximum, and one whose resolved identity
+  policy does not map that credential's identity to. It says that the peer
+  answers `OK` to that credential where no `user` is sent, which is what the
+  baseline case below drives. The policy must also refuse that identity a
+  `user` of zero octets, which a deployment whose policy grants any `user`
+  cannot supply. Such a peer cannot run the second decision case and is not
+  non-conforming for that. It also says whether appending a trailing newline to
+  that credential makes it invalid to the peer's backend, which is what the
+  credential case below appends. A backend that accepts the modified value
+  cannot run that case and is not non-conforming for that either. It also says
+  whether the server is configured to supply `authn_id`. Where it is and the
+  backend can supply one, it also gives a credential whose resolved identity is
+  longer than `authn_id`'s §3.1 maximum, and one whose resolved identity
   carries a control character, each of which the server would answer `OK` to
-  with no `user` sent. A server not configured to supply `authn_id`, or
-  whose backend cannot supply such an identity, cannot run the over-long
-  identity case and is not non-conforming for that.
+  with no `user` sent. A server not configured to supply `authn_id`, or whose
+  backend cannot supply an identity of a given shape, cannot run the case that
+  drives that shape and is not non-conforming for that.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
@@ -1731,11 +1747,13 @@ document does not specify. A driver MUST be given all of them:
 - **F12**: whether the peer under test makes the peer-credentials check §5
   permits, which of §5's answers it gives where it does, whether it accepts the
   uid the driver connects from for every other case in this section, and a
-  second uid it refuses, which the case below connects from. §5 leaves the check
-  to a deployment and the answer to the server, so none of them is derivable
-  from the wire. F5's case asks a driver to run as a second uid, so the
-  affordance is one a driver has already. F5 settles that uid against what the
-  client expects, and this fixture settles its own against what the server
+  second uid it refuses, which the case below connects from. Where the server's
+  rules also govern which peers may reach which `service` values, it gives a
+  `service` the uid the driver otherwise connects from may not reach. §5 leaves
+  the check to a deployment and the answer to the server, so none of them is
+  derivable from the wire. F5's case asks a driver to run as a second uid, so
+  the affordance is one a driver has already. F5 settles that uid against what
+  the client expects, and this fixture settles its own against what the server
   refuses.
 
 One further case is a decision rather than a rejection, and a driver exercises
@@ -1745,7 +1763,7 @@ can reach:
 | case | against | expected | needs |
 |---|---|---|---|
 | A credential valid for one identity, sent with a `user` the server holds that identity may not act as, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_USER_UNKNOWN` and not `AUTHN_DENIED_CREDENTIAL` | F1, F3 |
-| A credential the peer accepts, sent with a `user` of zero octets, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+| A credential the peer accepts, sent with a `user` of zero octets, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_CREDENTIAL` | F1, F3 |
 
 Requiring an `AUTHENTICATE_RESPONSE`, and requiring a denial within it, each
 carry weight. An `AUTHENTICATE_REQUEST` requires a `service`, so a driver must
@@ -1754,15 +1772,16 @@ choose one, and a `service` the server does not hold obliges it to answer
 A peer holding no services would otherwise pass the only test of §6.2's binding
 rule without examining a credential.
 
-The first case excludes the codes §6.2.1's preconditions make untrue here. F3
+Each case excludes the codes §6.2.1's preconditions make untrue here. F3
 supplies a `user` the server holds, so the name resolves and an identity
-resolved, which is what §6.2.1 makes `AUTHN_DENIED_USER_UNKNOWN` untrue of. F3
-supplies a credential the server accepts, so the server established that
-credential valid, which is what §6.2.1 makes `AUTHN_DENIED_CREDENTIAL` untrue
-of. The case cannot require `AUTHN_DENIED_POLICY` in its place, since §6.2
-leaves a server free to name no reason at all. The second case excludes nothing,
-because whether a `user` of zero octets resolves is a deployment's own fact and
-F3 settles only that the policy refuses it.
+resolved, which is what §6.2.1 makes `AUTHN_DENIED_USER_UNKNOWN` untrue of in
+the first case. F3 supplies a credential the peer accepts, so no conforming
+server can have established that credential invalid, which is the precondition
+§6.2.1 puts on `AUTHN_DENIED_CREDENTIAL`, and that reaches both cases. Neither
+can require `AUTHN_DENIED_POLICY` in its place, since §6.2 leaves a server free
+to name no reason at all. The second case excludes nothing further, because
+whether a `user` of zero octets resolves is a deployment's own fact and F3
+settles only that the policy refuses it.
 
 Further cases exercise the selector, which is neither a rejection nor a
 decision. Each drives the same condition into the enumeration its response type
@@ -1772,13 +1791,16 @@ carries:
 |---|---|---|---|
 | An AUTHENTICATE request naming a `service` the server does not recognise | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
 | A STATUS request naming a `service` the server does not recognise | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
-| An AUTHENTICATE request naming a value differing from a recognised `service` only in the case of its letters and in surrounding whitespace | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
-| A STATUS request naming a value differing from a recognised `service` only in the case of its letters and in surrounding whitespace | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
+| An AUTHENTICATE request naming a value differing from a recognised `service` only in the case of its letters | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
+| An AUTHENTICATE request naming a value differing from a recognised `service` only in leading and trailing whitespace | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
+| A STATUS request naming a value differing from a recognised `service` only in the case of its letters | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
+| A STATUS request naming a value differing from a recognised `service` only in leading and trailing whitespace | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
 | A STATUS request naming a `service` the server does not recognise, whose `max_age` its own limit also forbids | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1, F2 |
 
-The near-miss cases are the only test of §6.2's octet comparison, which §6.3
-carries too. A server that case-folds or trims before matching routes the
-variant to the policy the recognised name selects, and answers for that policy
+The near-miss cases are what test §6.2's octet comparison, which §6.3 carries
+too. Each variant differs in one dimension alone, so a server that case-folds
+before matching routes the first to the policy the recognised name selects, and
+one that trims routes the second there, and each answers for that policy
 instead. Driving both response types is what catches a server that matches one
 way in one handler and the other way in the other, which is a server disagreeing
 with itself about which policies it holds.
@@ -1829,11 +1851,14 @@ be made at all, since the driver does not hold the schema that would settle it.
 
 It checks their content on the same terms, over every field it recognises: no
 enumerated value of 0 or 1 (§3.4), no `utf8` value carrying a control character
-or an invalid encoding (§5), and no value above its §3.1 maximum. Each of those
-binds a sender and no input provokes a breach, so a driver records one wherever
-a run happens to produce it rather than in a case of its own. That is separate
-from what it does as a receiver, where §5 has it report the response as
-malformed.
+or an invalid encoding (§5), and no value above its §3.1 maximum. Over every
+message it also checks that the declared length is within `MAX_LENGTH` and not
+below the minimum for the version it declares, that every field the message type
+requires is present (§3.2), and that the peer wrote no octet beyond the declared
+length of the message it sent (§2). Each of those binds a sender and no input
+provokes a breach, so a driver records one wherever a run happens to produce it
+rather than in a case of its own. That is separate from what it does as a
+receiver, where §5 has it report the response as malformed.
 
 One further case pins what no other input reaches, since a server's own version
 word is not something a request can provoke:
@@ -1867,6 +1892,20 @@ refuses, and writes a complete request:
 what every shape of that choice shares: nothing the request asked for. A driver
 that cannot connect from a refused uid cannot run it, and is not non-conforming
 for that.
+
+A server whose rules govern which peers may reach which `service` values settles
+that at §4's step 11. The case below pins it there rather than after step 12.
+The driver connects from the uid the server otherwise accepts. It names a
+`service` that uid may not reach, whose `max_age` the server's own limit also
+forbids:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A `STATUS_REQUEST` naming a `service` the server holds that this peer may not reach, whose `max_age` its own limit also forbids | server | an `ERROR` whose `status` is `PEERCRED_DENIED` | F1, F2, F12 |
+
+A server settling the gate after step 12 answers `RATE_LIMITED` and fails. A
+server whose rules do not govern which peers reach which services cannot run it,
+and is not non-conforming for that.
 
 One further case observes a client that never connects at all, which §3.1's and
 §3.3's prohibitions reach and no message can. The driver listens, and hands the
@@ -1933,6 +1972,16 @@ A client that trims, folds case or re-encodes fails it. §3.2's rule names no
 field; `user` is what the case drives, because §6.2 has a server's decision turn
 on it.
 
+One case establishes the baseline the case after it is measured against:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| A credential the peer accepts, unmodified, sent with no `user`, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is `OK` | F1, F3 |
+
+Without it a server that denies every request passes the case below and the
+decision cases above without examining a credential, which is what the decision
+cases record for the `service` half.
+
 One further case observes the octets a server acts on, which §6.2 binds it to as
 well: the rule there reaches the server and not only the sender. The driver
 takes a credential the peer accepts, appends a newline, and sends it under a
@@ -1940,12 +1989,14 @@ takes a credential the peer accepts, appends a newline, and sends it under a
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential the peer accepts, with a trailing newline appended, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes | F1, F3 |
+| A credential the peer accepts, with a trailing newline appended, sent with no `user`, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_POLICY` | F1, F3 |
 
 A server that trims the credential before validating it answers `OK` and fails.
 Which denial it names is its own choice (§6.2): one that discloses no reason
 answers `AUTHN_DENIED`, and one that does answers `AUTHN_DENIED_CREDENTIAL`,
-since the value it was handed did not validate. Naming the codes by their prefix
+since the value it was handed did not validate. `AUTHN_DENIED_POLICY` is
+excluded, because §6.2.1 puts it on a server that established the credential
+valid and F3 settles that this one is not. Naming the codes by their prefix
 rather than requiring one of them is what leaves that choice open.
 
 No wire-level input reaches this rule. The octets are well formed either way,
@@ -2112,8 +2163,8 @@ still conforming:
 | `RESPONSE_INCOMPLETE` | the server's side ended before the declared octets had arrived, or before it declared a length at all, by end of file or an error that ends the read. An interrupted or would-block read is neither |
 | `RESPONSE_ABSENT` | the server's side ended with no response octet sent |
 | `RESPONSE_TIMEOUT` | the client's deadline expired before the declared octets had arrived |
-| `CONNECTION_FAILED` | the client never established a connection it was willing to use |
-| `INVALID_CONFIGURATION` | the client's own configuration could not produce a conforming request or a usable connection |
+| `CONNECTION_FAILED` | the client never established a connection it was willing to use, for a reason about the far end (§2) |
+| `INVALID_CONFIGURATION` | the client's own configuration could not produce a conforming request, or stopped the client before it attempted a connection (§2) |
 | `INVALID_REQUEST` | the caller's own input could not be carried in a conforming request |
 
 A client whose host wants a distinct code per condition MAY subdivide these,
@@ -2320,13 +2371,17 @@ nothing.
 A client adopting this mapping MUST fail its configuration closed. A module
 argument it does not recognise MUST fail rather than be ignored, which is not
 PAM's usual treatment of one, and a socket path MUST be configured, with no
-default supplied by the client. §2 adds that the path be absolute and
-representable in full. Each of those is the condition §7 names
-`INVALID_CONFIGURATION`, so a client that fails its configuration SHOULD return
-the code this appendix gives that name, from every entry point, and MUST NOT
-return `PAM_SUCCESS` or `PAM_IGNORE` from one. The fall-through code tells an
-operator to wait, and a stack given it falls through on every login until
-somebody edits a file.
+default supplied by the client. The `service` MUST be configured the same way,
+with no default supplied by the client and no fallback to a PAM item. `service`
+selects which policy the server runs (§6.2), so a client deriving it from the
+name of the stack it is loaded into changes which policy runs whenever a stack
+is copied to another service, and the change is invisible in the module line. §2
+adds that the path be absolute and representable in full. Each of those is the
+condition §7 names `INVALID_CONFIGURATION`, so a client that fails its
+configuration SHOULD return the code this appendix gives that name, from every
+entry point, and MUST NOT return `PAM_SUCCESS` or `PAM_IGNORE` from one. The
+fall-through code tells an operator to wait, and a stack given it falls through
+on every login until somebody edits a file.
 
 A client answering `pam_sm_acct_mgmt` from a cached `result` MUST hold one
 obtained in the same PAM transaction, for the `user` it is now asked about.
