@@ -125,8 +125,9 @@ request it holds whether or not the client's half-close has arrived. The
 half-close each side owes is its own obligation, and the check below on octets
 beyond the declared length is what reaches anything after them.
 
-**Octets beyond the declared length.** A client or server MUST NOT process
-anything past the declared length, and SHOULD reject the exchange as
+**Octets beyond the declared length.** A client or server MUST NOT write any
+octet beyond the declared length of the message it sent. A client or server MUST
+NOT process anything past the declared length, and SHOULD reject the exchange as
 `REQUEST_MALFORMED` if it observes any. Detection is not required to be
 exhaustive: excess octets may not have arrived yet, and nothing obliges a
 receiver to wait for them.
@@ -462,12 +463,14 @@ application asked. Dropping a field, or shortening a value, is the host
 application's decision, and it makes it with the report in hand.
 
 A server with a value to carry in a field, and no way to carry it within that
-field's maximum, answers `INTERNAL_ERROR` (§5). It MUST NOT truncate the value,
-and MUST NOT omit the field in its place. Where this document lets a server omit
-an optional field, the permission is about having no value to send rather than
-about having one that does not fit, and a client deployed to expect the field
-cannot tell those apart. `error_detail` is the exception: a server composes that
-value, so §5 has it shorten what it embeds and the message still goes.
+field's maximum or in a form the field's type and its own definition permit,
+answers `INTERNAL_ERROR` (§5). It MUST NOT truncate the value, MUST NOT alter it
+to make it emittable, and MUST NOT omit the field in its place. Where this
+document lets a server omit an optional field, the permission is about having no
+value to send rather than about having one it may not send, and a client
+deployed to expect the field cannot tell those apart. `error_detail` is the
+exception: a server composes that value, so §5 has it shorten what it embeds and
+the message still goes.
 
 No maximum here is set where an ordinary value approaches it, so a server that
 meets one has a fault of its own to report rather than a request it can answer.
@@ -803,7 +806,11 @@ connection rather than the message, and a receiver may observe them at any
 point. Where it observes them before it has written its response, §2's SHOULD
 reaches whatever outcome this order had produced, the decision included. Where
 it observes them afterwards it has already answered, and §3 has a server send
-one response to a connection.
+one response to a connection. For a client the corresponding point is the report
+to its host application. Where it observes them before it reports, §2's SHOULD
+reaches whatever outcome this order had produced. Where it observes them
+afterwards it has already reported, and this document does not have it retract a
+verdict its host application has acted on.
 
 Step 4 checks only what a receiver can check without knowing which schema
 applies. A tag equal to the tag before it is a repeat, which step 7 judges
@@ -1452,7 +1459,8 @@ It MUST NOT answer from data older than the client asked for.
 
 `service` selects which policy to describe. If it is absent, the server answers
 for itself as a whole rather than for any one policy. If it is present and the
-server does not recognise it, the server MUST answer `SERVICE_UNSUPPORTED`.
+server does not recognise it, the server MUST answer `SERVICE_UNSUPPORTED`. It
+recognises a `service` by comparing octets, on §6.2's terms.
 
 Response:
 
@@ -1651,7 +1659,11 @@ for every enumeration at once.
 Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
 
-- **F1**: a `service` value the peer recognises, and one it does not.
+- **F1**: a `service` value the peer recognises, and one it does not. It also
+  gives a value differing from the recognised one only in the case of its
+  letters and in leading and trailing whitespace, which the peer's configuration
+  does not hold. A deployment holding that variant as a `service` of its own
+  cannot supply it, and cannot run the cases below that use it.
 - **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
   applies only where it does, and a peer without a limit is not non-conforming
   for never exhibiting it.
@@ -1663,10 +1675,11 @@ document does not specify. A driver MUST be given all of them:
   newline to that credential makes it invalid to the peer's backend, which is
   what the credential case below appends. A backend that accepts the modified
   value cannot run that case and is not non-conforming for that either. It also
-  says whether the server is configured to supply `authn_id`. Where it is and
+    says whether the server is configured to supply `authn_id`. Where it is and
   the backend can supply one, it also gives a credential whose resolved identity
-  is longer than `authn_id`'s §3.1 maximum, and which the server would answer
-  `OK` to with no `user` sent. A server not configured to supply `authn_id`, or
+  is longer than `authn_id`'s §3.1 maximum, and one whose resolved identity
+  carries a control character, each of which the server would answer `OK` to
+  with no `user` sent. A server not configured to supply `authn_id`, or
   whose backend cannot supply such an identity, cannot run the over-long
   identity case and is not non-conforming for that.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
@@ -1756,11 +1769,20 @@ carries:
 |---|---|---|---|
 | An AUTHENTICATE request naming a `service` the server does not recognise | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
 | A STATUS request naming a `service` the server does not recognise | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
+| An AUTHENTICATE request naming a value differing from a recognised `service` only in the case of its letters and in surrounding whitespace | server | an `AUTHENTICATE_RESPONSE` whose `result` is `SERVICE_UNSUPPORTED` | F1 |
+| A STATUS request naming a value differing from a recognised `service` only in the case of its letters and in surrounding whitespace | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1 |
 | A STATUS request naming a `service` the server does not recognise, whose `max_age` its own limit also forbids | server | a `STATUS_RESPONSE` whose `serving` is `SERVICE_UNSUPPORTED` | F1, F2 |
 
-The third pins §4's step 11 before step 12. §4 says the order between steps 8
-and 9 is not observable because both yield the same status; this pair is not
-like that, since the selector answers in a `STATUS_RESPONSE` and the limit
+The near-miss cases are the only test of §6.2's octet comparison, which §6.3
+carries too. A server that case-folds or trims before matching routes the
+variant to the policy the recognised name selects, and answers for that policy
+instead. Driving both response types is what catches a server that matches one
+way in one handler and the other way in the other, which is a server disagreeing
+with itself about which policies it holds.
+
+The `max_age` case pins §4's step 11 before step 12. §4 says the order between
+steps 8 and 9 is not observable because both yield the same status; this pair is
+not like that, since the selector answers in a `STATUS_RESPONSE` and the limit
 answers `RATE_LIMITED` in an `ERROR`, so a receiver taking them the other way
 round is visible on the wire.
 
@@ -1928,24 +1950,29 @@ and what differs is what the server did with them before it decided, which is
 why F3 has to say whether the appended octet makes the credential invalid to the
 peer's backend.
 
-One further case observes a server holding a value it cannot carry, which §3.1
-binds and no wire-level input reaches. The driver sends a credential whose
-resolved identity is longer than `authn_id`'s maximum, with no `user`, under a
-`service` the server recognises, to a server configured to supply `authn_id`:
+Further cases observe a server holding a value it cannot carry, which §3.1 binds
+and no wire-level input reaches. Each drives a resolved identity the server may
+not send, under §3.1, §3.3 or §6.2. The request carries no `user` and a
+`service` the server recognises, and the server is one configured to supply
+`authn_id`:
 
 | case | against | expected | needs |
 |---|---|---|---|
 | A credential whose resolved identity is longer than `authn_id`'s §3.1 maximum, sent with no `user`, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
+| A credential whose resolved identity carries a control character, sent with no `user`, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
 
-A server that truncates the identity answers an `AUTHENTICATE_RESPONSE` carrying
-an `authn_id` at exactly its maximum, and fails. One that omits the field
+A server that truncates the over-long identity answers an
+`AUTHENTICATE_RESPONSE` carrying an `authn_id` at exactly its maximum, and
+fails. One that strips the control character answers a response carrying an
+identity nothing resolved to, and fails on the same ground, since §3.2 has a
+sender carry a value as the octets it was given. One that omits the field
 answers a response carrying none, and fails too, since §3.1 keeps omission for a
 server with no value to send. The identity is the value, so unlike
-`error_detail` there is nothing to embed less of, and the request was well
-formed throughout: what the case observes is what the server did with a value of
-its own. The request carries no `user`, and F3 supplies a credential the server
-would answer `OK` to without one, so the only thing between the server and an
-`OK` carrying the field is the identity's length.
+`error_detail` there is nothing to embed less of, and each request was well
+formed throughout: what these cases observe is what the server did with a value
+of its own. Neither request carries a `user`, and F3 supplies credentials the
+server would answer `OK` to without one, so the only thing between the server
+and an `OK` carrying the field is the identity it resolved.
 
 One further case observes a client whose peer closes while it is still writing,
 which §2.1 requires it to survive and §2 permits the server to do. Where F10

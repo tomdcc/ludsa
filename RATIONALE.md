@@ -280,12 +280,30 @@ part of the order does not slot into it: a receiver that observes them before it
 has answered rejects on them whatever the order had produced, and one that
 observes them afterwards has already answered.
 
+The fifteenth round found that settled for a server and left open for a client,
+which writes no response. Its answer is the report to its host application, and
+the same window applies: before the report, §2's SHOULD reaches the outcome;
+after it, the client has already answered its host. What the document does not
+do is have a client retract a verdict its host has acted on, which is where the
+asymmetry with a server ends. A grant already returned to an `sshd` is not
+something a later octet takes back.
+
 **Why detecting excess octets is optional but rejecting them is not.** These are
 different questions. Whether a client or server notices octets past the declared
 length depends on timing, because they may not have arrived yet. What it does
 once it has noticed depends on nothing: a client and a server disagreeing about
 where a message ends means one of them has a framing bug, and that is worth
 failing loudly on.
+
+**Why the sender is bound as well.** §5 had been saying that a receiver meeting
+these octets held something §2 forbade the sender to put on the connection, and
+§2 forbade the sender nothing: every sentence in it addressed a receiver, and
+the one request per connection was stated in the indicative. So a client with a
+buffered writer that flushed a stale tail breached nothing while its peer was
+told to reject the exchange. The fifteenth round wrote the sender's half, which
+is the shape §3.2 had just been given for `msg_type`, the type rules and
+`MAX_LENGTH`. It sits in §2 rather than in §3.2 because the octets are outside
+the message, which is the same reason the check is not one of §4's steps.
 
 **Why the specification sets no deadline values.** It says which deadlines exist
 and what each expiry produces, which is what an implementer needs to be correct.
@@ -1155,8 +1173,18 @@ leaves a client that sent no `user` unable to grant on a bare `OK`. The
 deployment fails and nothing says why.
 
 The permission to omit is therefore about having no value to send, never about
-having one that will not fit. The rule says so outright, since leaving it
+having one the server may not send. The rule says so outright, since leaving it
 implied would ask a reader to work out which sense a MAY carries.
+
+The fifteenth round found the escape hatch scoped to length alone, where the
+rules that box a server in are not. §3.3 requires a `utf8` field to be valid
+UTF-8 and to carry no NUL, and §6.2 forbids `authn_id` a control character, so a
+backend resolving an identity with a tab in it left a server forbidden to send
+the value, to truncate it, to alter it and to omit the field, with
+`INTERNAL_ERROR` reaching none of that. Omitting was the tempting answer and the
+dangerous one, for the reason the tenth round's proposal was overruled. The
+remedy now covers any form the field will not carry, and §7 drives the second
+shape beside the first.
 
 No maximum here is set anywhere near an ordinary value, so a server meeting one
 has a fault rather than an answer. That is what `INTERNAL_ERROR` names: waiting
@@ -2572,9 +2600,19 @@ for `user`, where the name goes to a policy and what that policy does with it is
 the deployment's decision. `service` is different because it selects which
 policy runs. A server comparing with `strings.EqualFold` routes a name to a
 policy that a server comparing octets answers `SERVICE_UNSUPPORTED` for. Both
-are self-consistent and both pass their own tests. F1 supplies the recognised
-and unrecognised names as opaque strings, so the conformance matrix cannot see
-the difference either.
+are self-consistent and both pass their own tests. F1 supplied the recognised
+and unrecognised names as opaque strings, so the conformance matrix could not
+see the difference either.
+
+The fifteenth round closed both halves of that. §6.3 carries the rule too, by
+pointing at §6.2: its `service` is a different field in a different message
+type, and without the pointer a server whose STATUS handler looked the name up
+case-insensitively answered `SERVING` for a name its AUTHENTICATE path answered
+`SERVICE_UNSUPPORTED` for, which is a server disagreeing with itself about which
+policies it holds. F1 now also supplies a value differing from the recognised
+one only in letter case and surrounding whitespace, and §7 drives it into both
+response types. Unlike the `credential` rule this one is modelled on, it is
+wire-observable throughout, so there was no reason for it to go undriven.
 
 #### 6.2.1 Auth result
 
