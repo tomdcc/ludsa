@@ -111,6 +111,18 @@ how. Nothing on the wire distinguishes `alarm()` from a `poll()` loop, and F7
 cannot, since both report the same outcome. So the hazard is real and it belongs
 in the guidance, which now names it.
 
+The fifteenth round put the boundary under pressure from both sides and the rule
+stayed where it is. One reviewer showed the observability leg does not hold on
+F7 alone: F9 already has a driver arrange a process-global property of the
+client's host, F8 already drives the client through its host interface, and
+§2.1's own case reads a host outcome rather than a wire one, so a driver could
+watch a host's timer across a call. The other showed §2 lets a server take
+unbounded time, so the deadline answers something the protocol authorises. What
+survives both is the first leg: the client chooses how to apply a deadline, the
+alternative costs nothing, and a rule here would bind a construction rather than
+an outcome the protocol delivered. The objection record carries the argument in
+full, since it is the one most likely to be raised again.
+
 The authorised-condition boundary also answers the objection that would
 otherwise sink it, which is the one that removed the format-string MUST: naming
 one condition implies the rest are safe. The rest are not conforming exchanges.
@@ -287,6 +299,16 @@ after it, the client has already answered its host. What the document does not
 do is have a client retract a verdict its host has acted on, which is where the
 asymmetry with a server ends. A grant already returned to an `sshd` is not
 something a later octet takes back.
+
+**Why the peer-times-`service` gate is pinned rather than bounded below.** §4
+gave it a lower bound and stopped, on the ground that the selector is what makes
+the question answerable. The fifteenth round found that leaves the rest of the
+order free: a peer refused a `service` it may not reach, on a request whose
+`max_age` the server's own limit also forbids, draws `PEERCRED_DENIED` from a
+server that settles the gate at step 11 and `RATE_LIMITED` from one that settles
+it after step 12. Both are `ERROR` statuses and the difference is on the wire,
+which is the express ground §7 already pins step 11 before step 12 on. A lower
+bound was half of an ordering rule.
 
 **Why detecting excess octets is optional but rejecting them is not.** These are
 different questions. Whether a client or server notices octets past the declared

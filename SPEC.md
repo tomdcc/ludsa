@@ -798,7 +798,10 @@ this order has run. A server that refuses there and then waits for
 the same way, and `RATE_LIMITED` displaces it there too: a refusal reached at
 accept was settled before the version could be read, and nothing the version
 draws changes it. A server whose rules also govern which peers may reach which
-`service` values cannot settle that second question before step 11.
+`service` values settles that at step 11, immediately after the selector. It
+cannot settle it earlier, since the selector is what names the `service`, and
+settling it later is visible on the wire: the gate answers `PEERCRED_DENIED`
+where step 12's limit answers `RATE_LIMITED`.
 
 §2's check for octets beyond the declared length is not one of these steps
 either. Those octets lie outside the message (§3), so the check concerns the
