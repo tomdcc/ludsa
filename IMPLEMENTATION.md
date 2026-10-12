@@ -228,11 +228,16 @@ if off+int(l) > len(buf) { return ErrMalformed }   // wrong
 With `l` a `uint32` near 2^32 and `int` 32 bits wide, `off+int(l)` goes
 negative, the check passes, and the slice expression panics instead. That panic
 is recovered and reported as `INTERNAL_ERROR`, on an input that is plainly
-`REQUEST_MALFORMED`. Compare without the addition:
+`REQUEST_MALFORMED`. Establish `off <= len(buf)` first, then compare without the
+addition:
 
 ```go
 if l > uint32(len(buf)-off) { return ErrMalformed }   // right
 ```
+
+The precondition is not optional. With `off` past the end, `len(buf)-off` is
+negative and the conversion wraps it to near 2^32. The comparison then passes
+every length, which is the hazard this form exists to remove.
 
 **C: the same overflow, without Go's slice panic to catch it.** The extent check
 above is written in Go, where the wrong form panics and the panic is recovered.
@@ -338,11 +343,12 @@ kernel raises `SIGPIPE` and the default action terminates the process. In Go the
 runtime raises it only for file descriptors 1 and 2, so a write to a closed
 socket returns `EPIPE` as an ordinary error and nothing dies. A runtime that
 maps signals to exceptions gives you a third shape. The cause is one sequence
-and the manifestation is a property of the language, which is why §2.1 binds the
-outcome and says nothing about the mechanism: a client MUST NOT let its host
-application terminate because a write to the socket failed. Everything below is
-how to satisfy that in C, and in Go the rule costs nothing except that an
-unrecovered panic on a write error breaks it.
+and the manifestation is a property of the language, which is why §2.1 binds
+outcomes and says nothing about the mechanism. A client MUST NOT let its host
+application terminate because a write to the socket failed. Nor may it take
+process-wide state its host relies on in order to meet an obligation this
+document puts on it. Everything below is how to satisfy that in C, and in Go the
+rule costs nothing except that an unrecovered panic on a write error breaks it.
 
 **Suppress `SIGPIPE` per write, and leave the host's disposition alone.**
 Writing to a socket whose peer has closed raises `SIGPIPE` in C, whose default
@@ -404,11 +410,11 @@ this way disarms the timer that closes an unauthenticated connection. Installing
 the handler replaces the host's.
 
 Set the socket non-blocking and drive `poll()` against a `CLOCK_MONOTONIC`
-budget. That takes nothing from the host and needs no disposition. §2.1 does not
-reach this: the ninth round bound the write because the protocol authorises a
-server to close on a client still writing, and it named no signal. This is the
-same class of hazard with no rule beside it, which is why the guidance is
-emphatic here.
+budget. That takes nothing from the host and needs no disposition. §2.1 reaches
+this: bounding a deadline with `alarm()` takes process-wide state the host
+application relies on in order to meet an obligation this document puts on a
+client, which §2.1 forbids. The rule names no signal and catches this one by its
+effect, so the guidance names the mechanism the rule does not.
 
 ## Detecting octets beyond the declared length
 
@@ -715,6 +721,12 @@ happens to produce one, so nothing you can drive will surface it. Give the
 enumeration types no usable zero: an explicit unset constant, and an encoder
 that rejects it, so a handler that left the field unset fails at the encoder.
 The decode side of the same zero is below, under a field absent from the wire.
+
+A conformance driver needs the opposite of that encoder. §7 has it put a
+`result` of 0 on the wire, and most of its numbered cases require frames a
+conforming encoder refuses to produce. Build the driver's emit path separately
+from the one the server and the client use, or those cases become unsendable and
+get dropped rather than run.
 
 **The map hazard applies on decode too, for the opposite reason.** A map catches
 a repeated tag for free, which is what makes it tempting, and it discards the
@@ -1194,12 +1206,14 @@ deferral to document that its stack needs an `account` line. It does not say
 what such a stack looks like, and the shape is not the one an operator arrives
 with from `pam_ldap` or `pam_sss`.
 
-**Where every user is a LUDSA principal**, both lines are `required` and there
-is nothing else to arrange:
+**Where every user is a LUDSA principal**, both lines are `required` and the
+module's own arguments are all there is to arrange. Appendix B has the module
+supply no default for either `socket=` or `service=` and take neither from a PAM
+item, so both appear on every line and a line missing one fails closed:
 
 ```
-auth     required  pam_ludsa.so socket=/run/ludsa/ludsa.sock
-account  required  pam_ludsa.so socket=/run/ludsa/ludsa.sock
+auth     required  pam_ludsa.so socket=/run/ludsa/ludsa.sock service=sshd
+account  required  pam_ludsa.so socket=/run/ludsa/ludsa.sock service=sshd
 ```
 
 The `account` line is what catches an authorisation denial, which Appendix B
@@ -1217,14 +1231,14 @@ is needed and none of them works alone.
 ```
 auth     [success=1 default=ignore] \
          pam_succeed_if.so user notingroup ludsa quiet
-auth     sufficient  pam_ludsa.so socket=/run/ludsa/ludsa.sock
+auth     sufficient  pam_ludsa.so socket=/run/ludsa/ludsa.sock service=sshd
 auth     required    pam_unix.so
 
 account  [success=ok user_unknown=ignore default=bad] pam_unix.so
 account  [success=1 default=ignore] \
          pam_succeed_if.so user notingroup ludsa quiet
 account  [default=bad success=ok user_unknown=ignore] \
-         pam_ludsa.so socket=/run/ludsa/ludsa.sock
+         pam_ludsa.so socket=/run/ludsa/ludsa.sock service=sshd
 account  required    pam_permit.so
 ```
 
@@ -1439,8 +1453,8 @@ been measured here, and belongs in the Docker harness beside the
 `net.Listen` takes a path and nothing else, so `chdir` is the only route to
 directory-relative semantics, and the working directory is process-global. A
 library that changes it is mutating state shared with the host process and
-racing every other thread, which is the objection that keeps
-`signal(SIGPIPE, SIG_IGN)` out of `libludsa` too.
+racing every other thread, which is what §2.1 now forbids outright and is why
+`signal(SIGPIPE, SIG_IGN)` stays out of `libludsa` too.
 
 §2 settles what each side does rather than resolving one: a server fails to
 start and a client refuses to connect, reporting `INVALID_CONFIGURATION`. The

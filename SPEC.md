@@ -105,15 +105,15 @@ It learns only that no response arrived and the connection ended, which §7 name
 request at all.
 
 **The server closes after it responds.** Having written its response the server
-MUST shut down its write direction (`shutdown(SHUT_WR)`, `CloseWrite()`), and
-MUST do so whether or not §3 owes a drain. Where it owes one it completes the
-drain after that, with its read direction still open, and closes when the drain
-ends. A server owing no drain MAY close outright instead, which ends both
-directions at once. There is no connection reuse, so a client that reads on for
-end of file never blocks on a draining server. A client MUST NOT require end of
-file to complete an exchange whose declared octets it already holds, since a
-server closing with octets still unread may end that read in an error rather
-than at end of file, and this document does not say which.
+MUST end its write direction. Where §3 owes a drain it MUST do so by shutting
+that direction down (`shutdown(SHUT_WR)`, `CloseWrite()`), complete the drain
+with its read direction still open, and close when the drain ends. A server
+owing no drain MAY close outright instead, which ends both directions at once.
+There is no connection reuse, so a client that reads on for end of file never
+blocks on a draining server. A client MUST NOT require end of file to complete
+an exchange whose declared octets it already holds, since a server closing with
+octets still unread may end that read in an error rather than at end of file,
+and this document does not say which.
 
 **A message is delivered at its declared octets.** A receiver holding every
 octet the envelope declared holds the message. Nothing that happens on the
@@ -151,16 +151,17 @@ the deadline was bounding. When its response deadline expires it closes without
 replying, because the channel it would answer on is the one that is blocked.
 
 A server MUST respond as soon as it determines it cannot reach a decision, with
-`UNAVAILABLE` or `INTERNAL_ERROR` as §5 requires. Whether it bounds the time it
-spends trying is its own choice.
+the status or result §5 and §6.2.1 give the condition it reached. Whether it
+bounds the time it spends trying is its own choice.
 
 A client's own deadline has no representation on the wire, since a status
 appears only in a response and the client has already sent its request. The
 client reports it locally and never as a `REQUEST_` code. §7 has it report
 `RESPONSE_TIMEOUT` where the deadline expired before the declared octets
-arrived, whatever had arrived by then. §5 gives `REQUEST_TIMEOUT` to the
-server's request deadline, and a client whose own deadline expired has learned
-only that the server has not answered yet.
+arrived, whatever had arrived by then. That name reaches only a deadline that
+expired after the client had a connection it was willing to use. §5 gives
+`REQUEST_TIMEOUT` to the server's request deadline, and a client whose own
+deadline expired has learned only that the server has not answered yet.
 
 The server SHOULD bound concurrent connections. At its limit it MAY respond
 `RATE_LIMITED`, and MAY instead stop accepting and leave connections in the
@@ -192,22 +193,30 @@ there, a retryable reason that had not resolved by the client's deadline, and a
 peer whose identity is not the one the client was configured to expect. No
 `RESPONSE_` name fits it, because a response cannot be absent from a request
 that was never sent. Each condition it covers is one the client reached by
-attempting a connection. Where a client's own configuration stopped it before it
-attempted one, `INVALID_CONFIGURATION` (§7) names that, and `INVALID_REQUEST`
-(§3.1) names input its caller may not put on the wire.
+attempting a connection. A deadline that expired before the client established a
+connection it was willing to use is one of them, and never `RESPONSE_TIMEOUT`,
+since no request had been sent for a response to be late to. Where a client's
+own configuration stopped it before it attempted one, `INVALID_CONFIGURATION`
+(§7) names that, and `INVALID_REQUEST` (§3.1) names input its caller may not put
+on the wire.
 
 **A client may be configured with the server identity it expects**, as a uid.
-Where it is, the client MUST confirm the peer's identity before it writes. It
-MUST close the connection where it cannot, without issuing a request, and report
-the condition §7 names `CONNECTION_FAILED`.
+Where it is, the client MUST confirm the peer's identity before it writes, from
+the connected descriptor rather than from the path it connected to. It MUST
+close the connection where it cannot, without issuing a request, and report the
+condition §7 names `CONNECTION_FAILED`.
 
 Not confirming covers a peer that is someone else and a peer the client could
 not identify. A deployment that asks for a check its platform cannot perform
 therefore fails rather than proceeds.
 
-This document names no mechanism, because none works everywhere. Where the two
-sides do not share a user namespace, a peer uid is translated or comes back as
-the overflow uid. A client with no such configuration is conforming.
+This document names no mechanism, because none works everywhere. What it binds
+is where the answer comes from: a mechanism reading the connected descriptor
+satisfies the rule, and a check of the path's owner does not, since the owner of
+a path and the process holding the other end of a connection are different facts
+and the path can change under a client that trusts it. Where the two sides do
+not share a user namespace, a peer uid is translated or comes back as the
+overflow uid. A client with no such configuration is conforming.
 
 **Socket visibility.** At the path clients use, the socket MUST never be
 observable with any of the twelve mode bits `07777` set that `0660` does not, or
@@ -277,9 +286,12 @@ every version of the protocol:
   process-wide state its host application relies on in order to meet any
   obligation this document puts on it. §2, §3 and §5 each authorise a server to
   close a connection a client is still writing to, so that write failing is a
-  conforming exchange rather than a fault, and §2's deadlines are the client's
-  own to construct. A client is loaded into a host application it does not own
-  (§1). This binds nothing about how a client is built beyond those outcomes.
+  conforming exchange rather than a fault. A client whose write to the socket
+  fails MUST still attempt to read a response before it reports, and reports
+  what it read, since §3 has a server that rejects a message early write its
+  response before it drains or closes. §2's deadlines are the client's own to
+  construct. A client is loaded into a host application it does not own (§1).
+  This binds nothing about how a client is built beyond those outcomes.
 
 ## 3. Framing
 
@@ -1028,22 +1040,32 @@ Such a server owes no drain and MAY read and discard, on §3's terms. It parses
 nothing beyond `ludsa_version_major`, and holds no length it may rely on, so
 §3's permission to stop early does not apply and its bounds do.
 
+`PEERCRED_DENIED` discloses that the peer was refused and why. That is a smaller
+disclosure than it looks, because a uid is not freely chosen: an attacker must
+already be running as one to try it, where a user name can be guessed without
+limit. A server unwilling to disclose even that closes without replying. That is
+closing without replying, whether or not it read the version word first, and it
+is the answer that says nothing. All of that is about a refusal reached at
+accept. §2 names which refusals it relieves of answering, and a gate settled at
+§4's step 11 is not among them.
+
 A server whose rules also govern which peers may reach which `service` values
 has a second gate. It cannot close that one before it has read a `service`. Its
 credentials check still happens at accept. What waits is which services this
 peer may reach, a question §4's step 11 settles and `PEERCRED_DENIED` also
-answers. The gate concerns services the server holds: a `service` it does not
-hold draws `SERVICE_UNSUPPORTED` (§6.2.1, §6.3) whoever the peer is, since there
-is nothing behind the name for the gate to guard. A request too malformed to
-yield a `service` never lets it decide, so the framing status is the only answer
-it has.
+answers. A server that reaches this gate has read the request, so §2 obliges it
+to answer and the permission above to close without replying does not reach it.
+The gate concerns services the server holds: a `service` it does not hold draws
+`SERVICE_UNSUPPORTED` (§6.2.1, §6.3) whoever the peer is, since there is nothing
+behind the name for the gate to guard. A request too malformed to yield a
+`service` never lets it decide, so the framing status is the only answer it has.
 
-It discloses that the peer was refused and why. That is a smaller disclosure
-than it looks, because a uid is not freely chosen: an attacker must already be
-running as one to try it, where a user name can be guessed without limit. A
-server unwilling to disclose even that closes without replying. That is closing
-without replying, whether or not it read the version word first, and it is the
-answer that says nothing.
+A request carrying no `service` names no policy for the gate to guard, and a
+`PING_REQUEST` carries no selector at all. The gate MAY still reach such a
+request, since a deployment may hold a peer away from an answer about the server
+as a whole (§6.3), and a server refusing one there answers `PEERCRED_DENIED`.
+Whether it refuses or answers is the server's own choice, as its choice of
+answer at accept is, and §7 asserts neither.
 
 `RATE_LIMITED` is for a limit the server set on itself, on work or on
 connections, and the producers below are instances. One is §6.3's, where a
@@ -1267,9 +1289,11 @@ a log and goes no further, since what reaches the remote party is the host
 application's behaviour rather than this protocol's.
 
 When `user` is absent, `OK` states that the credential is valid and that the
-server raised no objection of its own. A server MAY still apply policy to the
-identity it extracted, and MAY answer `AUTHN_DENIED_POLICY` on that basis.
-Nothing obliges it to, and nothing on the wire tells a client whether it did.
+server raised no objection of its own, and a server MUST NOT answer it unless it
+established that the credential was valid (§6.2.1). A server MAY still apply
+policy to the identity it extracted, and MAY answer `AUTHN_DENIED_POLICY` on
+that basis. Nothing obliges it to, and nothing on the wire tells a client
+whether it did.
 
 So a client MUST NOT treat `OK` as an authorisation decision when it sent no
 `user`. It MUST NOT grant anything unless it has established which identity the
@@ -1402,9 +1426,13 @@ decision either, and a client fails both steps on it.
 
 Nothing here obliges a server to check a credential before it answers.
 `AUTHN_DENIED_USER_UNKNOWN` in particular does not imply that the credential was
-valid, and a server MAY answer it without having examined one.
-`AUTHN_DENIED_POLICY` is the exception: a server MUST NOT answer it unless it
-established that the credential was valid, since that is what the code states.
+valid, and a server MAY answer it without having examined one. The answers that
+turn on what a server established say so, and the rest do not. A server MUST NOT
+answer `OK` unless it established that the credential was valid, since that is
+what `OK` states (§6.2). Examining the credential establishes it, and so does a
+validation the server may still rely on. `AUTHN_DENIED_POLICY` carries the same
+precondition: a server MUST NOT answer it unless it established that the
+credential was valid, since that is what the code states.
 `AUTHN_DENIED_CREDENTIAL` carries the converse. A server MUST NOT answer it
 unless it established that the credential was invalid, since a deployment
 reading it reissues a credential, and one that was never examined was never the
@@ -1674,42 +1702,59 @@ Some of these depend on how the peer under test is configured, which this
 document does not specify. A driver MUST be given all of them:
 
 - **F1**: a `service` value the peer recognises, and one it does not. It also
-  gives two values the peer's configuration does not hold: one differing from
-  the recognised value only in the case of its letters, and one differing from
-  it only in leading and trailing whitespace. A deployment that cannot supply a
-  variant, because it holds that variant as a `service` of its own, because its
-  recognised value has no letters, or because its recognised value leaves no
-  room within `service`'s §3.1 maximum, cannot run the cases below that use
-  that variant and is not non-conforming for that.
-- **F2**: whether the peer implements the rate limiting §6.3 permits. Case 18
-  applies only where it does, and a peer without a limit is not non-conforming
-  for never exhibiting it.
-- **F3**: a credential the peer accepts, and a `user` the server holds that its
-  policy does not map that credential's identity to. It says that the peer
-  answers `OK` to that credential where no `user` is sent, which is what the
-  baseline case below drives. The policy must also refuse that identity a
-  `user` of zero octets, which a deployment whose policy grants any `user`
-  cannot supply. Such a peer cannot run the second decision case and is not
-  non-conforming for that. It also says whether appending a trailing newline to
-  that credential makes it invalid to the peer's backend, which is what the
-  credential case below appends. A backend that accepts the modified value
-  cannot run that case and is not non-conforming for that either. It also says
-  whether the server is configured to supply `authn_id`. Where it is and the
-  backend can supply one, it also gives a credential whose resolved identity is
-  longer than `authn_id`'s §3.1 maximum, and one whose resolved identity
-  carries a control character, each of which the server would answer `OK` to
-  with no `user` sent. A server not configured to supply `authn_id`, or whose
-  backend cannot supply an identity of a given shape, cannot run the case that
-  drives that shape and is not non-conforming for that.
+  gives values the peer's configuration does not hold, each differing from the
+  recognised value in one dimension: one differing only in the case of its
+  letters, and one differing only in leading and trailing whitespace. A
+  deployment that cannot supply a variant, because it holds that variant as a
+  `service` of its own, because its recognised value has no letters, or because
+  its recognised value leaves no room within `service`'s §3.1 maximum, cannot
+  run the cases below that use that variant and is not non-conforming for that.
+- **F2**: whether the peer implements the rate limiting §6.3 permits, the scope
+  of the limit, whether the whole server or one `service`, a sequence of
+  requests that leaves it forbidding a check, and how long it stays in that
+  state. Every case below that names a `max_age` the server's own limit also
+  forbids applies only where it does, and a peer without a limit is not
+  non-conforming for never exhibiting it. The orderings those cases pin at §4's
+  step 11 are then untested against it. A driver needs the scope and the
+  sequence because the cases pinning step 11 assert an answer the limit does not
+  produce, so a driver that cannot establish the limit was engaged when its
+  request landed cannot tell a conforming server from one that took §4's steps
+  in the wrong order. Where the limit is scoped per `service`, the case naming a
+  `service` the peer may not reach is out of reach, since the driver cannot
+  provoke a check on that `service` to engage it.
+- **F3**: a credential the peer accepts, a `user` the server holds that its
+  policy does map that credential's identity to, and a `user` the server holds
+  that its policy does not. The baseline case below and the cases measured
+  against it send the mapped `user`. A peer whose policy maps no `user` to that
+  identity, and which therefore answers `OK` to no request this fixture can
+  build, cannot run those cases and is not non-conforming for that. The policy
+  must also refuse that identity a `user` of zero octets, which a deployment
+  whose policy grants any `user` cannot supply. Such a peer cannot run the
+  second decision case and is not non-conforming for that. It also says whether
+  appending a trailing newline to that credential makes it invalid to the peer's
+  backend, which is what the credential case below appends. A backend that
+  accepts the modified value cannot run that case, and neither can a peer whose
+  accepted credential leaves no room for the appended octet within
+  `credential`'s §3.1 maximum, since §3.1 forbids the driver sending it. Neither
+  is non-conforming for that. It also says whether the server is configured to
+  supply `authn_id`. Where it is and the backend can supply one, it also gives a
+  credential whose resolved identity is longer than `authn_id`'s §3.1 maximum,
+  and one whose resolved identity carries a control character, each of which the
+  server would answer `OK` to with the mapped `user` sent. A server not
+  configured to supply `authn_id`, or whose backend cannot supply an identity of
+  a given shape, cannot run the case that drives that shape and is not
+  non-conforming for that.
 - **F4**: the bound the peer sets on the drain (§3), where it sets one. §2's
   request deadline bounds the drain otherwise, and F6 supplies that. A server
   whose bound is shorter than the driver's round trip has stopped draining
   legitimately and cannot be told from one that never drained.
 - **F5**: the server identity the client under test is configured to expect, and
-  a driver socket bound and listened on by a process running as a different uid,
-  at a path that uid owns. §2 names no mechanism, so the driver supplies what a
-  peer-credential check and an ownership check each read. A client configured
-  with none owes nothing under §2 and cannot run the case below.
+  a driver socket bound and listened on by a process running as a different uid.
+  §2 binds the confirmation to the connected descriptor and names no mechanism
+  beyond that, so the driver supplies what any such mechanism reads. The driver
+  arranges for that uid to own the path as well, which costs nothing and keeps
+  the fixture usable by a client whose check predates that rule. A client
+  configured with none owes nothing under §2 and cannot run the case below.
 - **F6**: the deadlines the peer applies (§2). A driver needs the server's
   accept-to-complete-request deadline to know how long to stall, and the
   client's overall deadline to know how long to hold a connection open and how
@@ -1799,17 +1844,18 @@ carries:
 
 The near-miss cases are what test §6.2's octet comparison, which §6.3 carries
 too. Each variant differs in one dimension alone, so a server that case-folds
-before matching routes the first to the policy the recognised name selects, and
-one that trims routes the second there, and each answers for that policy
-instead. Driving both response types is what catches a server that matches one
-way in one handler and the other way in the other, which is a server disagreeing
-with itself about which policies it holds.
+before matching routes the case variant to the policy the recognised name
+selects, and one that trims routes the whitespace variant there, and each
+answers for that policy instead. Driving both response types is what catches a
+server that matches one way in one handler and the other way in the other, which
+is a server disagreeing with itself about which policies it holds.
 
-The `max_age` case pins §4's step 11 before step 12. §4 says the order between
-steps 8 and 9 is not observable because both yield the same status; this pair is
-not like that, since the selector answers in a `STATUS_RESPONSE` and the limit
-answers `RATE_LIMITED` in an `ERROR`, so a receiver taking them the other way
-round is visible on the wire.
+The `max_age` case pins §4's step 11 before step 12 for the selector, as the
+peer-gate case below pins it for the gate. §4 says the order between steps 8 and
+9 is not observable because both yield the same status; this pair is not like
+that, since the selector answers in a `STATUS_RESPONSE` and the limit answers
+`RATE_LIMITED` in an `ERROR`, so a receiver taking them the other way round is
+visible on the wire.
 
 One further case observes what a server does after it has answered, which no
 status can show. The driver writes an 8-octet envelope declaring a
@@ -1865,11 +1911,15 @@ word is not something a request can provoke:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| Any request carrying a `ludsa_version_minor` other than the server's own, which every response envelope reports (§3) | server | a response carrying the server's own `ludsa_version_minor`, not the one sent | |
+| Two requests carrying two different `ludsa_version_minor` values, neither of which the driver need know to be other than the server's | server | both responses carry the same `ludsa_version_minor`, which is therefore not an echo | |
 
 §3.2's rule against emitting an optional field that has no value is not
 driveable. A zero-length value is a value (§3.2), so nothing distinguishes the
-two from outside.
+two from outside. §2.1's rule against a client changing process-wide state its
+host application relies on is not driveable either. That rule turns on why a
+client changed the state, and a case can observe only that it changed, so a case
+would fail a client that changed a disposition for a reason of its own and
+breached nothing.
 
 One further case observes what a client does before it writes anything, which
 §2's conditional obligation reaches and no message can. The driver accepts the
@@ -1901,7 +1951,7 @@ forbids:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A `STATUS_REQUEST` naming a `service` the server holds that this peer may not reach, whose `max_age` its own limit also forbids | server | an `ERROR` whose `status` is `PEERCRED_DENIED` | F1, F2, F12 |
+| A `STATUS_REQUEST` naming a `service` the server holds that this peer may not reach, whose `max_age` its own limit also forbids | server | an `ERROR` whose `status` is `PEERCRED_DENIED` | F2, F12 |
 
 A server settling the gate after step 12 answers `RATE_LIMITED` and fails. A
 server whose rules do not govern which peers reach which services cannot run it,
@@ -1976,7 +2026,7 @@ One case establishes the baseline the case after it is measured against:
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential the peer accepts, unmodified, sent with no `user`, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is `OK` | F1, F3 |
+| A credential the peer accepts, unmodified, sent with the `user` F3 maps that credential's identity to, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is `OK` | F1, F3 |
 
 Without it a server that denies every request passes the case below and the
 decision cases above without examining a credential, which is what the decision
@@ -1989,15 +2039,17 @@ takes a credential the peer accepts, appends a newline, and sends it under a
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential the peer accepts, with a trailing newline appended, sent with no `user`, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_POLICY` | F1, F3 |
+| A credential the peer accepts, with a trailing newline appended, sent with the `user` F3 maps that credential's identity to, under a `service` the server recognises | server | an `AUTHENTICATE_RESPONSE` whose `result` is one of §6.2.1's `AUTHN_DENIED` codes, and is not `AUTHN_DENIED_POLICY` | F1, F3 |
 
 A server that trims the credential before validating it answers `OK` and fails.
 Which denial it names is its own choice (§6.2): one that discloses no reason
 answers `AUTHN_DENIED`, and one that does answers `AUTHN_DENIED_CREDENTIAL`,
 since the value it was handed did not validate. `AUTHN_DENIED_POLICY` is
 excluded, because §6.2.1 puts it on a server that established the credential
-valid and F3 settles that this one is not. Naming the codes by their prefix
-rather than requiring one of them is what leaves that choice open.
+valid and F3 settles that this one is not. `AUTHN_DENIED_USER_UNKNOWN` is
+untrue, since the request carries a `user` the server holds and §6.2.1 keys that
+code on a name that does not resolve. Naming the codes by their prefix rather
+than requiring one of them is what leaves that choice open.
 
 No wire-level input reaches this rule. The octets are well formed either way,
 and what differs is what the server did with them before it decided, which is
@@ -2012,8 +2064,8 @@ not send, under §3.1, §3.3 or §6.2. The request carries no `user` and a
 
 | case | against | expected | needs |
 |---|---|---|---|
-| A credential whose resolved identity is longer than `authn_id`'s §3.1 maximum, sent with no `user`, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
-| A credential whose resolved identity carries a control character, sent with no `user`, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
+| A credential whose resolved identity is longer than `authn_id`'s §3.1 maximum, sent with the `user` F3 maps that credential's identity to, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
+| A credential whose resolved identity carries a control character, sent with the `user` F3 maps that credential's identity to, under a `service` the server recognises, to a server configured to supply `authn_id` | server | an `ERROR` whose `status` is `INTERNAL_ERROR` | F1, F3 |
 
 A server that truncates the over-long identity answers an
 `AUTHENTICATE_RESPONSE` carrying an `authn_id` at exactly its maximum, and
@@ -2024,9 +2076,10 @@ answers a response carrying none, and fails too, since §3.1 keeps omission for 
 server with no value to send. The identity is the value, so unlike
 `error_detail` there is nothing to embed less of, and each request was well
 formed throughout: what these cases observe is what the server did with a value
-of its own. Neither request carries a `user`, and F3 supplies credentials the
-server would answer `OK` to without one, so the only thing between the server
-and an `OK` carrying the field is the identity it resolved.
+of its own. Each request carries the `user` F3 maps that credential's identity
+to, and F3 supplies credentials the server would answer `OK` to with it. So the
+only thing between the server and an `OK` carrying the field is the identity it
+resolved.
 
 One further case observes a client whose peer closes while it is still writing,
 which §2.1 requires it to survive and §2 permits the server to do. Where F10
@@ -2046,6 +2099,21 @@ and `MAX_LENGTH` forbids a larger one. F10 is what makes the case reliable: a
 client that writes in bounded pieces, pausing between them, is still writing
 when the driver closes. F8's near-maximum `credential` widens that window rather
 than creating it.
+
+One further case observes a client whose write failed with a response already on
+the connection, which §2.1 obliges it to read. Where F10 lets it, the driver
+accepts, reads part of the request, writes a complete `ERROR` carrying
+`REQUEST_TOO_LARGE`, shuts down its write direction and closes:
+
+| case | against | expected | needs |
+|---|---|---|---|
+| The connection closed while the client under test is still writing its request, with a complete `ERROR` written before the close | client | the client reports `REQUEST_TOO_LARGE` | F8, F10 |
+
+The case above cannot separate a client that reads from one that does not, since
+the driver writes no response octet there and `RESPONSE_ABSENT` is the true
+answer. Here a client that abandons the exchange when its write fails reports
+`RESPONSE_ABSENT` instead, and Appendix B sends the two names to PAM codes that
+differ in whether they stop the stack or fall it through.
 
 A client that offers no such configuration is driven by a driver that accepts
 and closes at once, reading nothing. The case is then best-effort, because
@@ -2162,8 +2230,8 @@ still conforming:
 | `RESPONSE_UNSUPPORTED` | the response carried a `msg_type` the client does not implement |
 | `RESPONSE_INCOMPLETE` | the server's side ended before the declared octets had arrived, or before it declared a length at all, by end of file or an error that ends the read. An interrupted or would-block read is neither |
 | `RESPONSE_ABSENT` | the server's side ended with no response octet sent |
-| `RESPONSE_TIMEOUT` | the client's deadline expired before the declared octets had arrived |
-| `CONNECTION_FAILED` | the client never established a connection it was willing to use, for a reason about the far end (§2) |
+| `RESPONSE_TIMEOUT` | the client's deadline expired, after it established a connection it was willing to use, before the declared octets had arrived |
+| `CONNECTION_FAILED` | the client never established a connection it was willing to use, for a reason it reached by attempting a connection (§2) |
 | `INVALID_CONFIGURATION` | the client's own configuration could not produce a conforming request, or stopped the client before it attempted a connection (§2) |
 | `INVALID_REQUEST` | the caller's own input could not be carried in a conforming request |
 
